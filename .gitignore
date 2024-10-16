@@ -1,0 +1,10 @@
+# Build Folders
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library/bin
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library/obj
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/bin
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/obj
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/bin
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/obj
+
+# Visual Studio
+UpFlux.Monitoring.Library/.vs/
