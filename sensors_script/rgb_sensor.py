@@ -7,11 +7,16 @@ oe = 15
 out = 18
 s2 = 25
 s3 = 24
+buzzer_pin = 26
 
-NUM_CYCLES = 10  
-
+NUM_CYCLES = 10 
+ 
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
 FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
+
+RED_THRESHOLD = 200
+GREEN_THRESHOLD = 100
+BLUE_THRESHOLD = 100
 
 def setup():
     GPIO.setmode(GPIO.BCM)
@@ -25,8 +30,20 @@ def setup():
     GPIO.output(oe, GPIO.LOW)
     GPIO.output(s0, GPIO.HIGH)
     GPIO.output(s1, GPIO.LOW)
+    GPIO.setup(buzzer_pin, GPIO.OUT)
+
+    global pwm
+    pwm = GPIO.PWM(buzzer_pin, 1000) 
 
     print("\n")
+    
+def buzzer_condition(red_value, green_value, blue_value):
+    return red_value > RED_THRESHOLD and green_value < GREEN_THRESHOLD and blue_value < BLUE_THRESHOLD
+
+def activate_buzzer():
+    pwm.start(50)  
+    time.sleep(1)  
+    pwm.stop()
     
 def map_frequency_to_rgb(freq, color):
     if freq < FREQ_MIN[color]:
@@ -47,7 +64,7 @@ def loop():
             GPIO.wait_for_edge(out, GPIO.FALLING)
         duration = time.time() - start
         red_freq = NUM_CYCLES / duration
-        print("Red frequency: ", red_freq)
+        print("red frequency: ", red_freq)
         
         GPIO.output(s2, GPIO.HIGH)
         GPIO.output(s3, GPIO.HIGH)
@@ -58,7 +75,7 @@ def loop():
             GPIO.wait_for_edge(out, GPIO.FALLING)
         duration = time.time() - start
         green_freq = NUM_CYCLES / duration
-        print("Green frequency: ", green_freq)
+        print("green frequency: ", green_freq)
         
         GPIO.output(s2, GPIO.LOW)
         GPIO.output(s3, GPIO.HIGH)
@@ -69,13 +86,17 @@ def loop():
             GPIO.wait_for_edge(out, GPIO.FALLING)
         duration = time.time() - start
         blue_freq = NUM_CYCLES / duration
-        print("Blue frequency: ", blue_freq)
+        print("blue frequency: ", blue_freq)
 
         red_value = map_frequency_to_rgb(red_freq, 'red')
         blue_value = map_frequency_to_rgb(blue_freq, 'blue')
         green_value = map_frequency_to_rgb(green_freq, 'green')
         
         print("RGB Values -> {}, {}, {}".format(red_value, green_value, blue_value))
+        
+        if buzzer_condition(red_value, green_value, blue_value):
+            print("buzzer activated")
+            activate_buzzer()
 
         time.sleep(2)
 
