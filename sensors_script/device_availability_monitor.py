@@ -1,3 +1,6 @@
+"""
+Module that monitor package installation and control LEDs accordingly  
+"""
 import RPi.GPIO as GPIO
 import time
 import subprocess
@@ -7,6 +10,9 @@ GPIO.setmode(GPIO.BCM)
 GREEN_LED = 10
 YELLOW_LED = 9
 RED_LED = 11
+
+DPKG_LOG_PATH = '/var/log/dpkg.log'
+UPFLUX_LOG_PATH = '/var/log/upflux.log'
 
 GPIO.setup(GREEN_LED, GPIO.OUT)
 GPIO.setup(YELLOW_LED, GPIO.OUT)
@@ -28,30 +34,25 @@ def is_package_installing():
 
     return False
 
-def is_installation_failed():
+def get_log_tail():
     try:
-        result_dpkg = subprocess.run(['tail', '-n', '10', '/var/log/dpkg.log'], stdout=subprocess.PIPE, text=True)
-        result_uplflux = subprocess.run(['tail', '-n', '10', '/var/log/upflux.log'], stdout=subprocess.PIPE, text=True)
-        if "error" in result_dpkg.stdout.lower() or "error" in result_uplflux.stdout.lower():
-            return True
+        result_dpkg = subprocess.run(['tail', '-n', '10', DPKG_LOG_PATH], stdout=subprocess.PIPE, text=True)
+        result_uplflux = subprocess.run(['tail', '-n', '10', UPFLUX_LOG_PATH], stdout=subprocess.PIPE, text=True)
+        return result_dpkg.stdout.lower(), result_uplflux.stdout.lower()
     except subprocess.SubprocessError as e:
-        print(f"Error reading dpkg log: {e}")
+        print(f"Error reading logs: {e}")
 
-    return False
+def is_installation_failed(log_data):
+    return "error" in log_data[0] or "error" in log_data[1]
 
-def is_installation_success():
-    try:
-        result_dpkg = subprocess.run(['tail', '-n', '10', '/var/log/dpkg.log'], stdout=subprocess.PIPE, text=True)
-        if "status installed" in result_dpkg.stdout.lower():
-            return True
-    except subprocess.SubprocessError as e:
-        print(f"Error reading dpkg log: {e}")
-
-    return False
+def is_installation_success(log_data):
+    return "status installed" in log_data[0]
 
 try:
     while True:
-        if is_installation_failed():
+        log_data = get_log_tail() 
+        
+        if is_installation_failed(log_data):
             GPIO.output(GREEN_LED, GPIO.LOW)
             GPIO.output(YELLOW_LED, GPIO.LOW)
             GPIO.output(RED_LED, GPIO.HIGH)
@@ -59,7 +60,7 @@ try:
             GPIO.output(GREEN_LED, GPIO.LOW)
             GPIO.output(RED_LED, GPIO.LOW)
             GPIO.output(YELLOW_LED, GPIO.HIGH)
-        elif is_installation_success():
+        elif is_installation_success(log_data):
             set_green_default()
         else:
             set_green_default()

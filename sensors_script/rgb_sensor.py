@@ -73,8 +73,6 @@ class ColorSensor:
         elif color == 'green':
             GPIO.output(S2_PIN, GPIO.HIGH)
             GPIO.output(S3_PIN, GPIO.HIGH)
-        else:
-            raise ValueError(f"invalid color specified: {color}")
 
         time.sleep(0.3)  
         start = time.time()
@@ -87,8 +85,6 @@ class ColorSensor:
     def loop(self):
         while True:
             try:
-                current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
                 red_freq = self.measure_color_frequency('red')
                 red_value = self.map_frequency_to_rgb(red_freq, 'red')
                 print(f"Red frequency: {red_freq} Hz -> RGB value: {red_value}")
@@ -106,7 +102,7 @@ class ColorSensor:
                 if self.buzzer_condition(red_value, green_value, blue_value):
                     print("Buzzer activated")
                     logging.info(
-                        f"Time: {current_time} - buzzer activated due to color condition "
+                        f"buzzer activated due to color condition "
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
                     )
                     self.activate_buzzer()
@@ -114,8 +110,7 @@ class ColorSensor:
                 time.sleep(2)
 
             except Exception as e:
-                current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                logging.error(f"Time: {current_time} - error occurred: {e}", exc_info=True)
+                logging.error(f"error occurred: {e}", exc_info=True)
                 time.sleep(1)
 
     def cleanup(self):
