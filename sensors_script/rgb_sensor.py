@@ -10,6 +10,9 @@ s3 = 24
 
 NUM_CYCLES = 10  
 
+FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
+FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
+
 def setup():
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(out, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -24,6 +27,13 @@ def setup():
     GPIO.output(s1, GPIO.LOW)
 
     print("\n")
+    
+def map_frequency_to_rgb(freq, color):
+    if freq < FREQ_MIN[color]:
+        freq = FREQ_MIN[color]
+    elif freq > FREQ_MAX[color]:
+        freq = FREQ_MAX[color]
+    return int((freq - FREQ_MIN[color]) / (FREQ_MAX[color] - FREQ_MIN[color]) * 255)  
 
 def loop():
     while True:
@@ -60,6 +70,12 @@ def loop():
         duration = time.time() - start
         blue_freq = NUM_CYCLES / duration
         print("Blue frequency: ", blue_freq)
+
+        red_value = map_frequency_to_rgb(red_freq, 'red')
+        blue_value = map_frequency_to_rgb(blue_freq, 'blue')
+        green_value = map_frequency_to_rgb(green_freq, 'green')
+        
+        print("RGB Values -> {}, {}, {}".format(red_value, green_value, blue_value))
 
         time.sleep(2)
 
