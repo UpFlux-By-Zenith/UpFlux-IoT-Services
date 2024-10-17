@@ -1,5 +1,7 @@
 import RPi.GPIO as GPIO
 import time
+import logging
+import datetime
 
 s0 = 23
 s1 = 14
@@ -8,6 +10,10 @@ out = 18
 s2 = 25
 s3 = 24
 buzzer_pin = 26
+
+log_file = '/var/log/upflux.log'
+logging.basicConfig(filename=log_file, level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s:%(message)s')
 
 NUM_CYCLES = 10 
  
@@ -54,51 +60,62 @@ def map_frequency_to_rgb(freq, color):
 
 def loop():
     while True:
-        
-        GPIO.output(s2, GPIO.LOW)
-        GPIO.output(s3, GPIO.LOW)
-        time.sleep(0.3)
-        
-        start = time.time()
-        for impulse_count in range(NUM_CYCLES):
-            GPIO.wait_for_edge(out, GPIO.FALLING)
-        duration = time.time() - start
-        red_freq = NUM_CYCLES / duration
-        print("red frequency: ", red_freq)
-        
-        GPIO.output(s2, GPIO.HIGH)
-        GPIO.output(s3, GPIO.HIGH)
-        time.sleep(0.3)
-        
-        start = time.time()
-        for impulse_count in range(NUM_CYCLES):
-            GPIO.wait_for_edge(out, GPIO.FALLING)
-        duration = time.time() - start
-        green_freq = NUM_CYCLES / duration
-        print("green frequency: ", green_freq)
-        
-        GPIO.output(s2, GPIO.LOW)
-        GPIO.output(s3, GPIO.HIGH)
-        time.sleep(0.3)
-        
-        start = time.time()
-        for impulse_count in range(NUM_CYCLES):
-            GPIO.wait_for_edge(out, GPIO.FALLING)
-        duration = time.time() - start
-        blue_freq = NUM_CYCLES / duration
-        print("blue frequency: ", blue_freq)
+        try:
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        red_value = map_frequency_to_rgb(red_freq, 'red')
-        blue_value = map_frequency_to_rgb(blue_freq, 'blue')
-        green_value = map_frequency_to_rgb(green_freq, 'green')
-        
-        print("RGB Values -> {}, {}, {}".format(red_value, green_value, blue_value))
-        
-        if buzzer_condition(red_value, green_value, blue_value):
-            print("buzzer activated")
-            activate_buzzer()
+            GPIO.output(s2, GPIO.LOW)
+            GPIO.output(s3, GPIO.LOW)
+            time.sleep(0.3)
+            
+            start = time.time()
+            for impulse_count in range(NUM_CYCLES):
+                GPIO.wait_for_edge(out, GPIO.FALLING)
+            duration = time.time() - start
+            red_freq = NUM_CYCLES / duration
+            print("red frequency: ", red_freq)
+            
+            GPIO.output(s2, GPIO.HIGH)
+            GPIO.output(s3, GPIO.HIGH)
+            time.sleep(0.3)
+            
+            start = time.time()
+            for impulse_count in range(NUM_CYCLES):
+                GPIO.wait_for_edge(out, GPIO.FALLING)
+            duration = time.time() - start
+            green_freq = NUM_CYCLES / duration
+            print("green frequency: ", green_freq)
+            
+            GPIO.output(s2, GPIO.LOW)
+            GPIO.output(s3, GPIO.HIGH)
+            time.sleep(0.3)
+            
+            start = time.time()
+            for impulse_count in range(NUM_CYCLES):
+                GPIO.wait_for_edge(out, GPIO.FALLING)
+            duration = time.time() - start
+            blue_freq = NUM_CYCLES / duration
+            print("blue frequency: ", blue_freq)
 
-        time.sleep(2)
+            red_value = map_frequency_to_rgb(red_freq, 'red')
+            blue_value = map_frequency_to_rgb(blue_freq, 'blue')
+            green_value = map_frequency_to_rgb(green_freq, 'green')
+            
+            print("RGB Values -> {}, {}, {}".format(red_value, green_value, blue_value))
+            
+            if buzzer_condition(red_value, green_value, blue_value):
+                logging.info(f"Time: {current_time} - buzzer activated due to color condition (R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})")
+                activate_buzzer()
+
+            time.sleep(2)
+            
+        except Exception as e:
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logging.error(f"Time: {current_time} - error occurred: {e}")
+            print(f"An error occurred: {e}")
+            break
+
+def endprogram():
+    GPIO.cleanup()
 
 if __name__ == '__main__':
     setup()
@@ -106,3 +123,5 @@ if __name__ == '__main__':
         loop()
     except KeyboardInterrupt:
         GPIO.cleanup()
+    finally:
+        endprogram()
