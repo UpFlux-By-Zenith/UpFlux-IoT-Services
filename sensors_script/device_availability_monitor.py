@@ -4,18 +4,18 @@ import subprocess
 
 GPIO.setmode(GPIO.BCM)
 
-green_led = 10
-yellow_led = 9
-red_led = 11
+GREEN_LED = 10
+YELLOW_LED = 9
+RED_LED = 11
 
-GPIO.setup(green_led, GPIO.OUT)
-GPIO.setup(yellow_led, GPIO.OUT)
-GPIO.setup(red_led, GPIO.OUT)
+GPIO.setup(GREEN_LED, GPIO.OUT)
+GPIO.setup(YELLOW_LED, GPIO.OUT)
+GPIO.setup(RED_LED, GPIO.OUT)
 
 def set_green_default():
-    GPIO.output(green_led, GPIO.HIGH)
-    GPIO.output(yellow_led, GPIO.LOW)
-    GPIO.output(red_led, GPIO.LOW)
+    GPIO.output(GREEN_LED, GPIO.HIGH)
+    GPIO.output(YELLOW_LED, GPIO.LOW)
+    GPIO.output(RED_LED, GPIO.LOW)
 
 def is_package_installing():
     try:
@@ -52,13 +52,13 @@ def is_installation_success():
 try:
     while True:
         if is_installation_failed():
-            GPIO.output(green_led, GPIO.LOW)
-            GPIO.output(yellow_led, GPIO.LOW)
-            GPIO.output(red_led, GPIO.HIGH)
+            GPIO.output(GREEN_LED, GPIO.LOW)
+            GPIO.output(YELLOW_LED, GPIO.LOW)
+            GPIO.output(RED_LED, GPIO.HIGH)
         elif is_package_installing():
-            GPIO.output(green_led, GPIO.LOW)
-            GPIO.output(red_led, GPIO.LOW)
-            GPIO.output(yellow_led, GPIO.HIGH)
+            GPIO.output(GREEN_LED, GPIO.LOW)
+            GPIO.output(RED_LED, GPIO.LOW)
+            GPIO.output(YELLOW_LED, GPIO.HIGH)
         elif is_installation_success():
             set_green_default()
         else:

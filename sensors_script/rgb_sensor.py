@@ -104,7 +104,7 @@ class ColorSensor:
                 print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
 
                 if self.buzzer_condition(red_value, green_value, blue_value):
-                    print("buzzer")
+                    print("Buzzer activated")
                     logging.info(
                         f"Time: {current_time} - buzzer activated due to color condition "
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
