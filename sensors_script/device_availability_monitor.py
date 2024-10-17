@@ -24,6 +24,9 @@ def set_green_default():
     GPIO.output(RED_LED, GPIO.LOW)
 
 def is_package_installing():
+    """
+    check if an installation is processing by checking for active 'apt' or 'dpkg' processes
+    """
     try:
         apt_process = subprocess.run(['pgrep', 'apt'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         dpkg_process = subprocess.run(['pgrep', 'dpkg'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -35,6 +38,9 @@ def is_package_installing():
     return False
 
 def get_log_tail():
+    """
+    read the last 10 lines of upflux and dpkg log file 
+    """
     try:
         result_dpkg = subprocess.run(['tail', '-n', '10', DPKG_LOG_PATH], stdout=subprocess.PIPE, text=True)
         result_uplflux = subprocess.run(['tail', '-n', '10', UPFLUX_LOG_PATH], stdout=subprocess.PIPE, text=True)

@@ -4,7 +4,6 @@ module for reading color RGB values using TCS3200 Color Sensor and activating a 
 import RPi.GPIO as GPIO
 import time
 import logging
-import datetime
 
 LOG_FILE = '/var/log/upflux.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, 
@@ -57,6 +56,10 @@ class ColorSensor:
         pwm.stop()
     
     def map_frequency_to_rgb(self, freq, color):
+        """
+        maps the frequency measured by sensor to an a RGB value(0 - 255).
+        frequency is constrained between max and min rounds
+        """
         freq_min = FREQ_MIN[color]
         freq_max = FREQ_MAX[color]
         freq = max(freq_min, min(freq, freq_max))
@@ -64,6 +67,10 @@ class ColorSensor:
         return rgb_value
     
     def measure_color_frequency(self, color):
+        """
+        measure the frequency for a color by configuring the sensor's filter
+        and counting the number of pulses within a time frame  
+        """
         if color == 'red':
             GPIO.output(S2_PIN, GPIO.LOW)
             GPIO.output(S3_PIN, GPIO.LOW)
