@@ -15,6 +15,6 @@ namespace UpFlux.Monitoring.Library.Interfaces
         /// <summary>
         /// Fetch the current network bandwidth metrics.
         /// </summary>
-        BandwidthMetrics GetBandwidthMetrics();
+        BandwidthMetrics GetBandwidthMetrics(string networkInterface);
     }
 }
