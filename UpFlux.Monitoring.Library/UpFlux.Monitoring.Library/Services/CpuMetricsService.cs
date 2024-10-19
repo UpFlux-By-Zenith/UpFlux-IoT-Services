@@ -77,7 +77,7 @@ namespace UpFlux.Monitoring.Library.Services
             try
             {
                 // Read the load average from the /proc/loadavg file
-                string loadAvgData = File.ReadAllText("/proc/loadavg");
+                string loadAvgData = LinuxUtility.RunCommand("cat /proc/loadavg");
 
                 // The first value is the 1 minute load average
                 string[] loadAvgValues = loadAvgData.Split(' ');

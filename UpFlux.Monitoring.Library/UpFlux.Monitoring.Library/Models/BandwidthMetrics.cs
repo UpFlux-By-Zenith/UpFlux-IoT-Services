@@ -12,11 +12,11 @@ namespace UpFlux.Monitoring.Library.Models
     public class BandwidthMetrics
     {
         /// <summary>
-        /// Download speed in Mbps
+        /// Download speed in Kbps
         /// </summary>
         public double DownloadSpeed { get; set; }
         /// <summary>
-        /// Upload speed in Mbps
+        /// Upload speed in Kbps
         /// </summary>
         public double UploadSpeed { get; set; }
     }
