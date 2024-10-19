@@ -8,3 +8,6 @@ UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/obj
 
 # Visual Studio
 UpFlux.Monitoring.Library/.vs/
+
+# Publish Profile User
+UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/UpFlux.Monitoring.Library.Sample.App.csproj.user
