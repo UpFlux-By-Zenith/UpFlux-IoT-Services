@@ -56,7 +56,7 @@ jobs:
 
     # Conditionally publish based on whether it's an automatic trigger or manual
     - name: Publish to GitHub Packages
-      if: github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         echo "Publishing package to GitHub Packages..."
         dotnet nuget push ./output/*.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "github"
