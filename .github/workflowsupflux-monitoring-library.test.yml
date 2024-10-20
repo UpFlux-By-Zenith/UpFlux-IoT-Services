@@ -1,0 +1,69 @@
+name: UpFlux Monitoring Library Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'UpFlux.Monitoring.Library/**'  # Specify the project path to only trigger when changes happen here
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Set up .NET
+    - name: Set up .NET Core
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.x'
+
+    # Install sysstat package on the Ubuntu runner (necessary for `mpstat` command)
+    - name: Install sysstat
+      run: sudo apt-get update && sudo apt-get install -y sysstat
+
+    # Read version from version.txt
+    - name: Read Version from version.txt
+      id: version
+      run: |
+        if [ -f ./UpFlux.Monitoring.Library/version.txt ]; then
+          version=$(cat ./UpFlux.Monitoring.Library/version.txt)
+        else
+          version="1.0.0"  # Default starting version
+        fi
+        echo "version=$version" >> $GITHUB_ENV
+
+    # Restore dependencies and build the solution
+    - name: Restore and Build Library
+      run: dotnet build ./UpFlux.Monitoring.Library/UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.csproj -r linux-arm --configuration Release
+
+    # Run unit tests, fail if tests do not pass
+    - name: Run Unit Tests
+      run: dotnet test ./UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/UpFlux.Monitoring.Library.Tests.csproj --configuration Release
+
+    # Only package if unit tests pass
+    - name: Package Library
+      if: success()
+      run: dotnet pack ./UpFlux.Monitoring.Library/UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.csproj -p:Version=${{ env.version }} --output ./output
+
+    # Conditionally publish based on whether it's an automatic trigger or manual
+    - name: Publish to GitHub Packages
+      if: github.event_name == 'push'
+      run: |
+        echo "Publishing package to GitHub Packages..."
+        dotnet nuget push ./output/*.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "github"
+    
+    - name: Upload Library Artifact
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v2
+      with:
+        name: upflux-monitoring-library-package
+        path: ./output
