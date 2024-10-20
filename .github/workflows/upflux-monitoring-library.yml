@@ -47,7 +47,7 @@ jobs:
 
     # Run unit tests, fail if tests do not pass
     - name: Run Unit Tests
-      run: dotnet test ./UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/UpFlux.Monitoring.Library.Tests.csproj --configuration Release
+      run: dotnet test ./UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/UpFlux.Monitoring.Library.Tests.csproj -r linux-arm --configuration Release
 
     # Only package if unit tests pass
     - name: Package Library
