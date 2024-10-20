@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.11.35312.102
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UpFlux.Monitoring.Library", "UpFlux.Monitoring.Library\UpFlux.Monitoring.Library.csproj", "{003CE96A-EA8B-4B21-945E-3F30B066C75E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UpFlux.Monitoring.Library", "UpFlux.Monitoring.Library\UpFlux.Monitoring.Library.csproj", "{003CE96A-EA8B-4B21-945E-3F30B066C75E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UpFlux.Monitoring.Library.Sample.App", "UpFlux.Monitoring.Library.Sample.App\UpFlux.Monitoring.Library.Sample.App.csproj", "{E6E23800-50F5-45F4-9B2C-623B84BBB73D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UpFlux.Monitoring.Library.Sample.App", "UpFlux.Monitoring.Library.Sample.App\UpFlux.Monitoring.Library.Sample.App.csproj", "{E6E23800-50F5-45F4-9B2C-623B84BBB73D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UpFlux.Monitoring.Library.Tests", "UpFlux.Monitoring.Library.Tests\UpFlux.Monitoring.Library.Tests.csproj", "{8C7ADEEF-83B7-4FB6-BAFC-F7E9A7E6F2D1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UpFlux.Monitoring.Library.Tests", "UpFlux.Monitoring.Library.Tests\UpFlux.Monitoring.Library.Tests.csproj", "{8C7ADEEF-83B7-4FB6-BAFC-F7E9A7E6F2D1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

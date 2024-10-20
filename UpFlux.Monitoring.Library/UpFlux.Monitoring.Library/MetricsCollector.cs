@@ -14,7 +14,6 @@ namespace UpFlux.Monitoring.Library
         private readonly IDiskMetricsService _diskMetricsService;
         private readonly ISystemUptimeService _systemUptimeService;
         private readonly ICpuTemperatureService _cpuTemperatureService;
-        private readonly IBandwidthService _bandwidthService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MetricsCollector"/> class with injected services.
@@ -32,8 +31,7 @@ namespace UpFlux.Monitoring.Library
             INetworkMetricsService networkMetricsService,
             IDiskMetricsService diskMetricsService,
             ISystemUptimeService systemUptimeService,
-            ICpuTemperatureService cpuTemperatureService,
-            IBandwidthService bandwidthService)
+            ICpuTemperatureService cpuTemperatureService)
         {
             _cpuMetricsService = cpuMetricsService;
             _memoryMetricsService = memoryMetricsService;
@@ -41,7 +39,6 @@ namespace UpFlux.Monitoring.Library
             _diskMetricsService = diskMetricsService;
             _systemUptimeService = systemUptimeService;
             _cpuTemperatureService = cpuTemperatureService;
-            _bandwidthService = bandwidthService;
         }
 
         /// <summary>
@@ -60,7 +57,6 @@ namespace UpFlux.Monitoring.Library
                     DiskMetrics = _diskMetricsService.GetDiskMetrics(),
                     SystemUptimeMetrics = _systemUptimeService.GetUptime(),
                     CpuTemperatureMetrics = _cpuTemperatureService.GetCpuTemperature(),
-                    BandwidthMetrics = _bandwidthService.GetBandwidthMetrics(),
                     Timestamp = DateTime.UtcNow
                 };
 

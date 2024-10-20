@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UpFlux.Monitoring.Library.Interfaces;
 using UpFlux.Monitoring.Library.Models;
 using UpFlux.Monitoring.Library.Utilities;
@@ -35,22 +31,14 @@ namespace UpFlux.Monitoring.Library.Services
         {
             try
             {
-                string[] headers = GetNetworkHeaders();
                 string[] networkData = GetNetworkInterfaceData(_networkInterface);
 
-                if (networkData != null && headers != null)
+                if (networkData != null)
                 {
-                    int receivedIndex = Array.IndexOf(headers, "bytes");
-                    int transmittedIndex = Array.LastIndexOf(headers, "bytes");
-
-                    if (receivedIndex == -1 || transmittedIndex == -1)
-                    {
-                        throw new InvalidOperationException("Unable to determine columns for received or transmitted bytes.");
-                    }
-
-                    // Parse received and transmitted bytes using dynamic column indices
-                    if (long.TryParse(networkData[receivedIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out long receivedBytes) &&
-                        long.TryParse(networkData[transmittedIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out long transmittedBytes))
+                    // Received bytes are the first value after the network interface
+                    // columns are hard-coded based on the output of /proc/net/dev
+                    if (long.TryParse(networkData[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long receivedBytes) &&
+                        long.TryParse(networkData[9], NumberStyles.Integer, CultureInfo.InvariantCulture, out long transmittedBytes))
                     {
                         return new NetworkMetrics
                         {
@@ -75,29 +63,6 @@ namespace UpFlux.Monitoring.Library.Services
         }
 
         /// <summary>
-        /// Retrieves the headers from /proc/net/dev to dynamically find the column indices.
-        /// </summary>
-        /// <returns>An array of headers representing the columns.</returns>
-        private string[] GetNetworkHeaders()
-        {
-            try
-            {
-                string[] lines = LinuxUtility.RunCommand("cat /proc/net/dev").Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                string? headerLine = lines.FirstOrDefault(line => line.TrimStart().StartsWith("Inter-"));
-                if (headerLine != null)
-                {
-                    string[] headers = headerLine.Split(new[] { ' ', '|' }, StringSplitOptions.RemoveEmptyEntries);
-                    return headers;
-                }
-                throw new InvalidOperationException("Unable to read network headers from /proc/net/dev.");
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Error reading /proc/net/dev headers: " + ex.Message, ex);
-            }
-        }
-
-        /// <summary>
         /// Parses the /proc/net/dev file to get data for a specific network interface.
         /// </summary>
         /// <param name="networkInterface">The network interface name</param>
@@ -106,7 +71,7 @@ namespace UpFlux.Monitoring.Library.Services
         {
             try
             {
-                string[] lines = File.ReadAllLines("/proc/net/dev");
+                string[] lines = LinuxUtility.RunCommand("cat /proc/net/dev").Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
                 // Look for the line that starts with the specified network interface
                 foreach (string line in lines)

@@ -13,7 +13,6 @@ namespace UpFlux.Monitoring.Library.Sample.App
             DiskMetricsService diskService = new DiskMetricsService();
             SystemUptimeService uptimeService = new SystemUptimeService();
             CpuTemperatureService temperatureService = new CpuTemperatureService();
-            BandwidthMetricsService bandwidthService = new BandwidthMetricsService();
 
             while (true)
             {
@@ -25,8 +24,7 @@ namespace UpFlux.Monitoring.Library.Sample.App
                 Console.WriteLine("4. Get Disk Metrics");
                 Console.WriteLine("5. Get System Uptime");
                 Console.WriteLine("6. Get CPU Temperature");
-                Console.WriteLine("7. Get Bandwidth Metrics");
-                Console.WriteLine("8. Exit");
+                Console.WriteLine("7. Exit");
                 Console.WriteLine("Select an option:");
 
                 string? choice = Console.ReadLine();
@@ -63,11 +61,6 @@ namespace UpFlux.Monitoring.Library.Sample.App
                         Console.WriteLine($"CPU Temperature: {cpuTemperatureMetrics.TemperatureCelsius} °C");
                         break;
                     case "7":
-                        BandwidthMetrics bandwidthMetrics = bandwidthService.GetBandwidthMetrics();
-                        Console.WriteLine($"Download Speed: {bandwidthMetrics.DownloadSpeed} Kbps");
-                        Console.WriteLine($"Upload Speed: {bandwidthMetrics.UploadSpeed} Kbps");
-                        break;
-                    case "8":
                         return;
                     default:
                         Console.WriteLine("Invalid option, please try again.");

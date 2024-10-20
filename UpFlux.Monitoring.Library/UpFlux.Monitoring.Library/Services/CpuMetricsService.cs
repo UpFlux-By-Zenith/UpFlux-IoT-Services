@@ -43,16 +43,8 @@ namespace UpFlux.Monitoring.Library.Services
                 // Split the result into words
                 string[] columns = result.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
-                // Find the index of the '%idle' column
-                int idleIndex = Array.FindIndex(columns, col => col.Contains("%idle", StringComparison.OrdinalIgnoreCase));
-
-                if (idleIndex == -1 || idleIndex >= columns.Length)
-                {
-                    throw new InvalidOperationException("Unable to find the '%idle' column.");
-                }
-
-                // Get the idle percentage from the column
-                if (double.TryParse(columns[idleIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double idlePercentage))
+                // Get the idle percentage (last column in the output)
+                if (columns.Length >= 12 && double.TryParse(columns[^1], NumberStyles.Float, CultureInfo.InvariantCulture, out double idlePercentage))
                 {
                     // CPU usage is 100% - idle percentage
                     return 100 - idlePercentage;

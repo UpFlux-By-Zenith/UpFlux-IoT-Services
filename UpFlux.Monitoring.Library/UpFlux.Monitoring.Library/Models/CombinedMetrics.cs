@@ -17,7 +17,6 @@ namespace UpFlux.Monitoring.Library.Models
         public DiskMetrics DiskMetrics { get; set; }
         public SystemUptimeMetrics SystemUptimeMetrics { get; set; }
         public CpuTemperatureMetrics CpuTemperatureMetrics { get; set; }
-        public BandwidthMetrics BandwidthMetrics { get; set; }
 
         /// <summary>
         /// Timestamp of when the metrics were collected.
