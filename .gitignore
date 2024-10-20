@@ -5,12 +5,18 @@ UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/bin
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/obj
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/bin
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/obj
+UpFlux.Monitoring.Service/UpFlux.Monitoring.Service/obj
+UpFlux.Monitoring.Service/UpFlux.Monitoring.Service/bin
 
 # Visual Studio
 UpFlux.Monitoring.Library/.vs/
+UpFlux.Monitoring.Service/.vs/
 
 # Publish Profile User
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/UpFlux.Monitoring.Library.Sample.App.csproj.user
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/Properties/PublishProfiles/FolderProfile.pubxml.user
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/UpFlux.Monitoring.Library.Tests.csproj.user
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/Properties/PublishProfiles/FolderProfile.pubxml.user
+
+# Ignore  NuGet.config
+UpFlux.Monitoring.Service/NuGet.config
