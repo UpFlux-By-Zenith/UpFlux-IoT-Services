@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+	<Platform>Any CPU</Platform>
+	<RuntimeIdentifier>linux-arm</RuntimeIdentifier>
+	<RuntimeIdentifiers>linux-arm;linux-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UpFlux.Monitoring.Library\UpFlux.Monitoring.Library.csproj" />
+  </ItemGroup>
+
+</Project>

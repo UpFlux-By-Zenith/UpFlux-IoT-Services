@@ -1,0 +1,176 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Comment CommentText="Interfaces">
+    <Position X="12.793" Y="2.432" Height="0.331" Width="1.057" />
+  </Comment>
+  <Comment CommentText="Utilities">
+    <Position X="9.268" Y="5.676" Height="0.409" Width="0.7" />
+  </Comment>
+  <Comment CommentText="Models">
+    <Position X="2.935" Y="6.153" Height="0.362" Width="1.08" />
+  </Comment>
+  <Comment CommentText="Services">
+    <Position X="14.088" Y="5.268" Height="0.347" Width="0.7" />
+  </Comment>
+  <Class Name="UpFlux.Monitoring.Library.MetricsCollector">
+    <Position X="5" Y="2.25" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAYACAAAAAAAAAAEAAAABAAQAAAAAAIAAAAAAAAAAAA=</HashCode>
+      <FileName>MetricsCollector.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.CombinedMetrics">
+    <Position X="0.5" Y="0.5" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAAAgAAABQKAAAAAAACAAAAAgAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\CombinedMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.CpuMetrics">
+    <Position X="5" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAABAAAAA=</HashCode>
+      <FileName>Models\CpuMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.CpuTemperatureMetrics">
+    <Position X="2.75" Y="4.25" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\CpuTemperatureMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.DiskMetrics">
+    <Position X="3" Y="2.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAIAAAAAAAAABAAAAAAAAAAAACAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\DiskMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.MemoryMetrics">
+    <Position X="3" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>EAAACAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Models\MemoryMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.NetworkMetrics">
+    <Position X="0.5" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAA=</HashCode>
+      <FileName>Models\NetworkMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Models.SystemUptimeMetrics">
+    <Position X="0.5" Y="3.25" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAA=</HashCode>
+      <FileName>Models\SystemUptimeMetrics.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Services.CpuMetricsService" BaseTypeListCollapsed="true">
+    <Position X="17.5" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAACAAAAIAAAAAAAACAAAAAAA=</HashCode>
+      <FileName>Services\CpuMetricsService.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Services.CpuTemperatureService" BaseTypeListCollapsed="true">
+    <Position X="16.75" Y="6" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAACAAAAA=</HashCode>
+      <FileName>Services\CpuTemperatureService.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Services.DiskMetricsService" BaseTypeListCollapsed="true">
+    <Position X="15.25" Y="3.75" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AAAIAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Services\DiskMetricsService.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Services.MemoryMetricsService" BaseTypeListCollapsed="true">
+    <Position X="14.25" Y="6" Width="2" />
+    <TypeIdentifier>
+      <HashCode>gAAAAAAAAAAAAAAAACAAAAAAAAAAQAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Services\MemoryMetricsService.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Services.NetworkMetricsService" BaseTypeListCollapsed="true">
+    <Position X="19.25" Y="5.75" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAIAgAAAA=</HashCode>
+      <FileName>Services\NetworkMetricsService.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Services.SystemUptimeService" BaseTypeListCollapsed="true">
+    <Position X="19.5" Y="4" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Services\SystemUptimeService.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Utilities.LinuxUtility">
+    <Position X="10.25" Y="6.25" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAACAAAAAAAAA=</HashCode>
+      <FileName>Utilities\LinuxUtility.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="UpFlux.Monitoring.Library.Utilities.NetworkInterfaceDetector">
+    <Position X="7.5" Y="6.75" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Utilities\NetworkInterfaceDetector.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Interface Name="UpFlux.Monitoring.Library.Interfaces.ISystemUptimeService" Collapsed="true">
+    <Position X="11.75" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Interfaces\ISystemUptimeService.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="UpFlux.Monitoring.Library.Interfaces.ICpuMetricsService" Collapsed="true">
+    <Position X="10" Y="0.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Interfaces\ICpuMetricsService.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="UpFlux.Monitoring.Library.Interfaces.ICpuTemperatureService" Collapsed="true">
+    <Position X="11.75" Y="0.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAA=</HashCode>
+      <FileName>Interfaces\ICpuTemperatureService.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="UpFlux.Monitoring.Library.Interfaces.IDiskMetricsService" Collapsed="true">
+    <Position X="13.5" Y="0.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Interfaces\IDiskMetricsService.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="UpFlux.Monitoring.Library.Interfaces.IMemoryMetricsService" Collapsed="true">
+    <Position X="15.25" Y="0.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Interfaces\IMemoryMetricsService.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="UpFlux.Monitoring.Library.Interfaces.INetworkMetricsService" Collapsed="true">
+    <Position X="10" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAA=</HashCode>
+      <FileName>Interfaces\INetworkMetricsService.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>

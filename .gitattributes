@@ -1,0 +1,2 @@
+# Set default behavior to automatically normalize line endings to LF (Linux-style) on commit
+* text=auto eol=lf

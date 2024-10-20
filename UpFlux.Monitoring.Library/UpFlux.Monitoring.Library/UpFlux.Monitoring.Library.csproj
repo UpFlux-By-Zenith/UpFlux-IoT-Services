@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+	<Platform>Any CPU</Platform>
+	<RuntimeIdentifier>linux-arm</RuntimeIdentifier>
+	<RuntimeIdentifiers>linux-arm;linux-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Title>UpFlux Monitoring Library</Title>
+    <Description>This library is a product of Team Zenith. It sole purpose is to provide implementations to gather the system metrics on an Automation Replica (Raspberry Pi)</Description>
+  </PropertyGroup>
+
+</Project>
