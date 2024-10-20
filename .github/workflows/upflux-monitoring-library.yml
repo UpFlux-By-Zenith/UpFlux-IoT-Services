@@ -56,13 +56,15 @@ jobs:
 
     # Conditionally publish based on whether it's an automatic trigger or manual
     - name: Publish to GitHub Packages
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      #if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.event_name == 'workflow_dispatch'
       run: |
         echo "Publishing package to GitHub Packages..."
-        dotnet nuget push ./output/*.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "github"
+        dotnet nuget push ./output/*.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-The-Boys/index.json"
     
     - name: Upload Library Artifact
-      if: github.event_name == 'workflow_dispatch'
+      #if: github.event_name == 'workflow_dispatch'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       uses: actions/upload-artifact@v3
       with:
         name: upflux-monitoring-library-package
