@@ -9,13 +9,13 @@ LOG_FILE = '/var/log/upflux.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, 
                     format='%(asctime)s %(levelname)s:%(message)s')
 
-S0_PIN = 23
-S1_PIN = 14
-OE_PIN = 15
-OUT_PIN = 18
-S2_PIN = 25
-S3_PIN = 24
-BUZZER_PIN = 26
+S0_PIN = 18
+S1_PIN = 15
+OE_PIN = 14
+OUT_PIN = 22
+S2_PIN = 17
+S3_PIN = 27
+BUZZER_PIN = 7
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
