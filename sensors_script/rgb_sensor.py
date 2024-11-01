@@ -48,7 +48,7 @@ class ColorSensor:
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return red_value > RED_THRESHOLD and green_value < GREEN_THRESHOLD and blue_value < BLUE_THRESHOLD
+        return not red_value > RED_THRESHOLD and green_value < GREEN_THRESHOLD and blue_value < BLUE_THRESHOLD
 
     def activate_buzzer(self):
         pwm.start(50)  
@@ -108,12 +108,14 @@ class ColorSensor:
 
                 if self.buzzer_condition(red_value, green_value, blue_value):
                     print("Buzzer activated")
-                    logging.info(
-                        f"buzzer activated due to color condition "
+                    logging.error(
+                        f"buzzer activated due to Invalid Color"
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
                     )
                     self.activate_buzzer()
-
+                else:
+                    logging.info("Valid color detected")
+                    
                 time.sleep(2)
 
             except Exception as e:
