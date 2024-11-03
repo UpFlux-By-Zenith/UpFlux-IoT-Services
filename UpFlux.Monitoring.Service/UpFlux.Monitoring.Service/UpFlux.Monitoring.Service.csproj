@@ -9,5 +9,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="UpFlux.Monitoring.Library" Version="*" />
   </ItemGroup>
 </Project>
