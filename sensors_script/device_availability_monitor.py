@@ -7,9 +7,9 @@ import subprocess
 
 GPIO.setmode(GPIO.BCM)
 
-GREEN_LED = 10
-YELLOW_LED = 9
-RED_LED = 11
+GREEN_LED = 21
+YELLOW_LED = 13
+RED_LED = 5
 
 DPKG_LOG_PATH = '/var/log/dpkg.log'
 UPFLUX_LOG_PATH = '/var/log/upflux.log'
@@ -39,11 +39,11 @@ def is_package_installing():
 
 def get_log_tail():
     """
-    read the last 10 lines of upflux and dpkg log file 
+    read the last line of upflux and dpkg log file 
     """
     try:
-        result_dpkg = subprocess.run(['tail', '-n', '10', DPKG_LOG_PATH], stdout=subprocess.PIPE, text=True)
-        result_uplflux = subprocess.run(['tail', '-n', '10', UPFLUX_LOG_PATH], stdout=subprocess.PIPE, text=True)
+        result_dpkg = subprocess.run(['tail', '-n', '1', DPKG_LOG_PATH], stdout=subprocess.PIPE, text=True)
+        result_uplflux = subprocess.run(['tail', '-n', '1', UPFLUX_LOG_PATH], stdout=subprocess.PIPE, text=True)
         return result_dpkg.stdout.lower(), result_uplflux.stdout.lower()
     except subprocess.SubprocessError as e:
         print(f"Error reading logs: {e}")

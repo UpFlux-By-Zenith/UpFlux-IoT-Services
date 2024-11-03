@@ -9,13 +9,13 @@ LOG_FILE = '/var/log/upflux.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, 
                     format='%(asctime)s %(levelname)s:%(message)s')
 
-S0_PIN = 23
-S1_PIN = 14
-OE_PIN = 15
-OUT_PIN = 18
-S2_PIN = 25
-S3_PIN = 24
-BUZZER_PIN = 26
+S0_PIN = 18
+S1_PIN = 15
+OE_PIN = 14
+OUT_PIN = 22
+S2_PIN = 17
+S3_PIN = 27
+BUZZER_PIN = 7
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
@@ -48,7 +48,7 @@ class ColorSensor:
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return red_value > RED_THRESHOLD and green_value < GREEN_THRESHOLD and blue_value < BLUE_THRESHOLD
+        return not red_value > RED_THRESHOLD and green_value < GREEN_THRESHOLD and blue_value < BLUE_THRESHOLD
 
     def activate_buzzer(self):
         pwm.start(50)  
@@ -108,12 +108,14 @@ class ColorSensor:
 
                 if self.buzzer_condition(red_value, green_value, blue_value):
                     print("Buzzer activated")
-                    logging.info(
-                        f"buzzer activated due to color condition "
+                    logging.error(
+                        f"buzzer activated due to Invalid Color"
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
                     )
                     self.activate_buzzer()
-
+                else:
+                    logging.info("Valid color detected")
+                    
                 time.sleep(2)
 
             except Exception as e:
