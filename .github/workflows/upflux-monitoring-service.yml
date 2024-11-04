@@ -25,6 +25,15 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '8.x'
+    
+    # Configure GitHub Packages as a NuGet source
+    - name: Configure GitHub Packages NuGet Source
+      run: |
+        dotnet nuget add source "https://nuget.pkg.github.com/UpFlux-By-The-Boys/index.json" \
+          --name "github" \
+          --username "PatrickOrjieh" \
+          --password "${{ secrets.MY_GITHUB_PAT }}" \
+          --store-password-in-clear-text
 
     # Install dependencies
     - name: Install dependencies
