@@ -11,6 +11,7 @@ UpFlux.Monitoring.Service/UpFlux.Monitoring.Service/bin
 # Visual Studio
 UpFlux.Monitoring.Library/.vs/
 UpFlux.Monitoring.Service/.vs/
+.vs
 
 # Publish Profile User
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Sample.App/UpFlux.Monitoring.Library.Sample.App.csproj.user
