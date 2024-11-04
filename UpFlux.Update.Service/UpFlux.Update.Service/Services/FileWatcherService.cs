@@ -1,19 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System;
 using System.IO;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using UpFlux.Update.Service.Models;
 using Microsoft.Extensions.Options;
 
 namespace UpFlux.Update.Service.Services
 {
-    /// <summary>
-    /// Watches a directory for new package files.
-    /// </summary>
     public class FileWatcherService
     {
         private readonly ILogger<FileWatcherService> _logger;
@@ -28,9 +21,6 @@ namespace UpFlux.Update.Service.Services
             _config = configOptions.Value;
         }
 
-        /// <summary>
-        /// Starts watching the specified directory.
-        /// </summary>
         public void StartWatching(string directory)
         {
             _logger.LogInformation("File Watcher started.");
@@ -45,17 +35,49 @@ namespace UpFlux.Update.Service.Services
         private void OnPackageCreated(object sender, FileSystemEventArgs e)
         {
             _logger.LogInformation($"New package detected: {e.FullPath}");
-            UpdatePackage package = new UpdatePackage
+
+            // Wait until the file is accessible
+            if (WaitForFile(e.FullPath))
             {
-                FilePath = e.FullPath,
-                Version = ExtractVersionFromFileName(e.Name)
-            };
-            PackageDetected?.Invoke(this, package);
+                UpdatePackage package = new UpdatePackage
+                {
+                    FilePath = e.FullPath,
+                    Version = ExtractVersionFromFileName(e.Name)
+                };
+                PackageDetected?.Invoke(this, package);
+            }
+            else
+            {
+                _logger.LogError($"Failed to access the file: {e.FullPath}");
+            }
         }
 
-        /// <summary>
-        /// Stops watching the directory.
-        /// </summary>
+        private bool WaitForFile(string filePath)
+        {
+            const int maxAttempts = 10;
+            const int delayMilliseconds = 500;
+
+            for (int i = 0; i < maxAttempts; i++)
+            {
+                try
+                {
+                    using (FileStream stream = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+                    {
+                        if (stream.Length > 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch (IOException)
+                {
+                    // The file is still locked, wait and retry
+                    Thread.Sleep(delayMilliseconds);
+                }
+            }
+            return false;
+        }
+
         public void StopWatching()
         {
             if (_watcher != null)
@@ -65,9 +87,6 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        /// <summary>
-        /// Extracts the version from the file name.
-        /// </summary>
         private string ExtractVersionFromFileName(string fileName)
         {
             string name = Path.GetFileNameWithoutExtension(fileName);

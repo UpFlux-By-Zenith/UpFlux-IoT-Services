@@ -1,20 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using UpFlux.Update.Service.Models;
 
 namespace UpFlux.Update.Service.Services
 {
-    /// <summary>
-    /// Listens for incoming packages via TCP. from the gateway server.
-    /// </summary>
     public class TcpListenerService
     {
         private readonly ILogger<TcpListenerService> _logger;
@@ -28,9 +22,6 @@ namespace UpFlux.Update.Service.Services
             _logger = logger;
         }
 
-        /// <summary>
-        /// Starts listening for incoming TCP connections.
-        /// </summary>
         public void StartListening(int port)
         {
             _tcpListener = new TcpListener(IPAddress.Any, port);
@@ -65,16 +56,26 @@ namespace UpFlux.Update.Service.Services
 
                 using FileStream fileStream = File.Create(tempFilePath);
                 await networkStream.CopyToAsync(fileStream);
+                await fileStream.FlushAsync();
+                fileStream.Close();
 
                 _logger.LogInformation($"Received package and saved to {tempFilePath}");
 
-                UpdatePackage package = new UpdatePackage
+                // Wait until the file is accessible
+                if (WaitForFile(tempFilePath))
                 {
-                    FilePath = tempFilePath,
-                    Version = ExtractVersionFromPackage(tempFilePath)
-                };
+                    UpdatePackage package = new UpdatePackage
+                    {
+                        FilePath = tempFilePath,
+                        Version = ExtractVersionFromPackage(tempFilePath)
+                    };
 
-                PackageReceived?.Invoke(this, package);
+                    PackageReceived?.Invoke(this, package);
+                }
+                else
+                {
+                    _logger.LogError($"Failed to access the file: {tempFilePath}");
+                }
             }
             catch (Exception ex)
             {
@@ -86,18 +87,38 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        /// <summary>
-        /// Stops listening for TCP connections.
-        /// </summary>
+        private bool WaitForFile(string filePath)
+        {
+            const int maxAttempts = 10;
+            const int delayMilliseconds = 500;
+
+            for (int i = 0; i < maxAttempts; i++)
+            {
+                try
+                {
+                    using (FileStream stream = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+                    {
+                        if (stream.Length > 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch (IOException)
+                {
+                    // The file is still locked, wait and retry
+                    Thread.Sleep(delayMilliseconds);
+                }
+            }
+            return false;
+        }
+
         public void StopListening()
         {
             _isListening = false;
             _tcpListener.Stop();
         }
 
-        /// <summary>
-        /// Extracts the version from the package file.
-        /// </summary>
         private string ExtractVersionFromPackage(string filePath)
         {
             string fileName = Path.GetFileName(filePath);
@@ -112,4 +133,3 @@ namespace UpFlux.Update.Service.Services
         }
     }
 }
-

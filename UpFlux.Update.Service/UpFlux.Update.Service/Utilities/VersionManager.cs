@@ -34,7 +34,29 @@ namespace UpFlux.Update.Service.Utilities
         public void StorePackage(UpdatePackage package)
         {
             string destinationPath = Path.Combine(_config.PackageDirectory, Path.GetFileName(package.FilePath));
-            File.Copy(package.FilePath, destinationPath, true);
+
+            const int maxAttempts = 5;
+            int attempt = 0;
+            bool copySuccess = false;
+
+            while (!copySuccess && attempt < maxAttempts)
+            {
+                try
+                {
+                    File.Copy(package.FilePath, destinationPath, true);
+                    copySuccess = true;
+                }
+                catch (IOException ex)
+                {
+                    attempt++;
+                    Thread.Sleep(500); // Wait before retrying
+                    if (attempt == maxAttempts)
+                    {
+                        throw new IOException($"Failed to copy package after {maxAttempts} attempts.", ex);
+                    }
+                }
+            }
+
             CleanOldVersions();
         }
 
