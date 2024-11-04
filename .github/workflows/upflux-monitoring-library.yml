@@ -59,7 +59,7 @@ jobs:
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         echo "Publishing package to GitHub Packages..."
-        dotnet nuget push ./output/*.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-The-Boys/index.json"
+        dotnet nuget push ./output/*.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-Zenith/index.json"
     
     - name: Upload Library Artifact
       if: github.event_name == 'workflow_dispatch'

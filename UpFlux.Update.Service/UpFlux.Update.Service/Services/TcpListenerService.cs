@@ -1,36 +1,32 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using UpFlux.Update.Service.Models;
 
 namespace UpFlux.Update.Service.Services
 {
-    /// <summary>
-    /// Listens for incoming packages via TCP. from the gateway server.
-    /// </summary>
     public class TcpListenerService
     {
         private readonly ILogger<TcpListenerService> _logger;
+        private readonly Configuration _config;
         private TcpListener _tcpListener;
         private bool _isListening;
 
-        public event EventHandler<UpdatePackage> PackageReceived;
-
-        public TcpListenerService(ILogger<TcpListenerService> logger)
+        public TcpListenerService(ILogger<TcpListenerService> logger, IOptions<Configuration> configOptions)
         {
             _logger = logger;
+            _config = configOptions.Value;
+
+            // Ensure the incoming directory exists
+            Directory.CreateDirectory(_config.IncomingPackageDirectory);
         }
 
-        /// <summary>
-        /// Starts listening for incoming TCP connections.
-        /// </summary>
         public void StartListening(int port)
         {
             _tcpListener = new TcpListener(IPAddress.Any, port);
@@ -61,20 +57,45 @@ namespace UpFlux.Update.Service.Services
             try
             {
                 using NetworkStream networkStream = client.GetStream();
-                string tempFilePath = Path.GetTempFileName();
 
-                using FileStream fileStream = File.Create(tempFilePath);
-                await networkStream.CopyToAsync(fileStream);
-
-                _logger.LogInformation($"Received package and saved to {tempFilePath}");
-
-                UpdatePackage package = new UpdatePackage
+                // Read the length of the filename (4 bytes)
+                byte[] fileNameLengthBytes = new byte[4];
+                int bytesRead = await ReadExactAsync(networkStream, fileNameLengthBytes, 0, 4);
+                if (bytesRead < 4)
                 {
-                    FilePath = tempFilePath,
-                    Version = ExtractVersionFromPackage(tempFilePath)
-                };
+                    _logger.LogError("Failed to read the length of the filename.");
+                    return;
+                }
+                int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
 
-                PackageReceived?.Invoke(this, package);
+                // Read the filename
+                byte[] fileNameBytes = new byte[fileNameLength];
+                bytesRead = await ReadExactAsync(networkStream, fileNameBytes, 0, fileNameLength);
+                if (bytesRead < fileNameLength)
+                {
+                    _logger.LogError("Failed to read the filename.");
+                    return;
+                }
+                string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+                // Validate the filename to prevent security issues
+                if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                {
+                    _logger.LogError("Invalid filename received.");
+                    return;
+                }
+
+                // Generate the destination path in the IncomingPackageDirectory
+                string destinationPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+
+                // Read the file contents and save to destinationPath
+                using FileStream fileStream = File.Create(destinationPath);
+                await networkStream.CopyToAsync(fileStream);
+                await fileStream.FlushAsync();
+
+                _logger.LogInformation($"Received package and saved to {destinationPath}");
+
+                // The FileWatcherService will detect the new file and handle it
             }
             catch (Exception ex)
             {
@@ -86,30 +107,27 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        /// <summary>
-        /// Stops listening for TCP connections.
-        /// </summary>
+        // Helper method to read an exact number of bytes from the stream
+        private async Task<int> ReadExactAsync(NetworkStream stream, byte[] buffer, int offset, int count)
+        {
+            int totalBytesRead = 0;
+            while (totalBytesRead < count)
+            {
+                int bytesRead = await stream.ReadAsync(buffer, offset + totalBytesRead, count - totalBytesRead);
+                if (bytesRead == 0)
+                {
+                    // End of stream reached before reading the required number of bytes
+                    break;
+                }
+                totalBytesRead += bytesRead;
+            }
+            return totalBytesRead;
+        }
+
         public void StopListening()
         {
             _isListening = false;
             _tcpListener.Stop();
         }
-
-        /// <summary>
-        /// Extracts the version from the package file.
-        /// </summary>
-        private string ExtractVersionFromPackage(string filePath)
-        {
-            string fileName = Path.GetFileName(filePath);
-            string pattern = "upflux-monitoring-service_";
-            if (fileName.StartsWith(pattern))
-            {
-                string versionPart = fileName.Substring(pattern.Length);
-                string version = versionPart.Split('_')[0];
-                return version;
-            }
-            return "0.0.0";
-        }
     }
 }
-

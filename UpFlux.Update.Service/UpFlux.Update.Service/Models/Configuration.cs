@@ -14,6 +14,7 @@ namespace UpFlux.Update.Service.Models
         public string GatewayServerIp { get; set; }
         public int GatewayServerPort { get; set; }
         public string GatewayServerLogEndpoint { get; set; }
+        public string IncomingPackageDirectory { get; set; }
         public string PackageDirectory { get; set; }
         public int MaxStoredVersions { get; set; }
         public string MonitoringServiceLog { get; set; }

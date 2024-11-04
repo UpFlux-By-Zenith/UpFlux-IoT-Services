@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -11,9 +8,6 @@ using UpFlux.Update.Service.Utilities;
 
 namespace UpFlux.Update.Service.Services
 {
-    /// <summary>
-    /// Main service that orchestrates the update process.
-    /// </summary>
     public class UpdateService : BackgroundService
     {
         private readonly ILogger<UpdateService> _logger;
@@ -56,89 +50,78 @@ namespace UpFlux.Update.Service.Services
             _logger.LogInformation("UpFlux Update Service is starting.");
 
             // Start the TCP listener
-            _tcpListenerService.PackageReceived += OnPackageReceived;
             _tcpListenerService.StartListening(_config.GatewayServerPort);
 
             // Start the file system watcher
-            _fileWatcherService.PackageDetected += OnPackageDetected;
-            _fileWatcherService.StartWatching(_config.PackageDirectory);
+            _fileWatcherService.PackageDetected += async (sender, package) => await HandlePackageAsync(package);
+            _fileWatcherService.StartWatching();
 
             await Task.CompletedTask;
         }
 
-        private async void OnPackageReceived(object sender, UpdatePackage package)
-        {
-            _logger.LogInformation($"Package received: {package.FilePath}");
-            await HandlePackageAsync(package);
-        }
-
-        private async void OnPackageDetected(object sender, UpdatePackage package)
-        {
-            _logger.LogInformation($"Package detected: {package.FilePath}");
-            await HandlePackageAsync(package);
-        }
-
-        /// <summary>
-        /// Handles the package update process.
-        /// </summary>
         private async Task HandlePackageAsync(UpdatePackage package)
         {
-            if (!IsMonitoringServicePackage(package))
+            try
             {
-                _logger.LogWarning("Received package is not the UpFlux Monitoring Service package. Ignoring.");
-                return;
-            }
-
-            // Store the package
-            _versionManager.StorePackage(package);
-
-            // Perform simulation
-            bool simulationResult = await _simulationService.SimulateInstallationAsync(package);
-            if (!simulationResult)
-            {
-                _logger.LogError("Simulation failed. Aborting update.");
-                await _gatewayNotificationService.SendLogAsync("Simulation failed for version " + package.Version);
-                return;
-            }
-
-            // Install the package
-            bool installationResult = await _installationService.InstallPackageAsync(package);
-            if (!installationResult)
-            {
-                _logger.LogError("Installation failed. Aborting update.");
-                await _gatewayNotificationService.SendLogAsync("Installation failed for version " + package.Version);
-                return;
-            }
-
-            // Monitor the monitoring service logs
-            bool monitoringResult = await _logMonitoringService.MonitorLogsAsync();
-            if (!monitoringResult)
-            {
-                _logger.LogError("Errors detected after installation. Initiating rollback.");
-                await _gatewayNotificationService.SendLogAsync("Errors detected after installation of version " + package.Version);
-
-                UpdatePackage previousPackage = _versionManager.GetPreviousVersion(package.Version);
-                if (previousPackage != null)
+                if (!IsMonitoringServicePackage(package))
                 {
-                    await _rollbackService.RollbackAsync(previousPackage);
-                    await _gatewayNotificationService.SendLogAsync("Rolled back to version " + previousPackage.Version);
+                    _logger.LogWarning("Received package is not the UpFlux Monitoring Service package. Ignoring.");
+                    return;
+                }
+
+                // Store the package (clean old versions)
+                _versionManager.StorePackage(package);
+
+                // Perform simulation
+                bool simulationResult = await _simulationService.SimulateInstallationAsync(package);
+                if (!simulationResult)
+                {
+                    _logger.LogError("Simulation failed. Aborting update.");
+                    await _gatewayNotificationService.SendLogAsync("Simulation failed for version " + package.Version);
+                    return;
+                }
+
+                // Install the package
+                bool installationResult = await _installationService.InstallPackageAsync(package);
+                if (!installationResult)
+                {
+                    _logger.LogError("Installation failed. Aborting update.");
+                    await _gatewayNotificationService.SendLogAsync("Installation failed for version " + package.Version);
+                    return;
+                }
+
+                // Monitor the monitoring service logs
+                bool monitoringResult = await _logMonitoringService.MonitorLogsAsync();
+                if (!monitoringResult)
+                {
+                    _logger.LogError("Errors detected after installation. Initiating rollback.");
+                    await _gatewayNotificationService.SendLogAsync("Errors detected after installation of version " + package.Version);
+
+                    UpdatePackage previousPackage = _versionManager.GetPreviousVersion(package.Version);
+                    if (previousPackage != null)
+                    {
+                        await _rollbackService.RollbackAsync(previousPackage);
+                        await _gatewayNotificationService.SendLogAsync("Rolled back to version " + previousPackage.Version);
+                    }
+                    else
+                    {
+                        _logger.LogError("No previous version available for rollback.");
+                        await _gatewayNotificationService.SendLogAsync("No previous version available for rollback.");
+                    }
                 }
                 else
                 {
-                    _logger.LogError("No previous version available for rollback.");
-                    await _gatewayNotificationService.SendLogAsync("No previous version available for rollback.");
+                    _logger.LogInformation("Update installed successfully and is running without errors.");
+                    await _gatewayNotificationService.SendLogAsync("Update to version " + package.Version + " installed successfully.");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogInformation("Update installed successfully and is running without errors.");
-                await _gatewayNotificationService.SendLogAsync("Update to version " + package.Version + " installed successfully.");
+                _logger.LogError(ex, "An error occurred during the update process.");
+                await _gatewayNotificationService.SendLogAsync("An error occurred during the update process: " + ex.Message);
             }
         }
 
-        /// <summary>
-        /// Checks if the package is the UpFlux Monitoring Service package.
-        /// </summary>
         private bool IsMonitoringServicePackage(UpdatePackage package)
         {
             string fileName = Path.GetFileName(package.FilePath);
