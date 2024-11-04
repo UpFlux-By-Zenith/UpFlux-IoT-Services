@@ -2,8 +2,8 @@
 using System.IO;
 using System.Threading;
 using Microsoft.Extensions.Logging;
-using UpFlux.Update.Service.Models;
 using Microsoft.Extensions.Options;
+using UpFlux.Update.Service.Models;
 
 namespace UpFlux.Update.Service.Services
 {
@@ -19,12 +19,16 @@ namespace UpFlux.Update.Service.Services
         {
             _logger = logger;
             _config = configOptions.Value;
+
+            // Ensure the directories exist
+            Directory.CreateDirectory(_config.IncomingPackageDirectory);
+            Directory.CreateDirectory(_config.PackageDirectory);
         }
 
-        public void StartWatching(string directory)
+        public void StartWatching()
         {
             _logger.LogInformation("File Watcher started.");
-            _watcher = new FileSystemWatcher(directory, _config.PackageNamePattern)
+            _watcher = new FileSystemWatcher(_config.IncomingPackageDirectory, _config.PackageNamePattern)
             {
                 EnableRaisingEvents = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime
@@ -34,17 +38,33 @@ namespace UpFlux.Update.Service.Services
 
         private void OnPackageCreated(object sender, FileSystemEventArgs e)
         {
-            _logger.LogInformation($"New package detected: {e.FullPath}");
+            _logger.LogInformation($"New package detected in incoming directory: {e.FullPath}");
 
             // Wait until the file is accessible
             if (WaitForFile(e.FullPath))
             {
-                UpdatePackage package = new UpdatePackage
+                string destinationPath = Path.Combine(_config.PackageDirectory, Path.GetFileName(e.FullPath));
+
+                // Copy the package to the PackageDirectory
+                try
                 {
-                    FilePath = e.FullPath,
-                    Version = ExtractVersionFromFileName(e.Name)
-                };
-                PackageDetected?.Invoke(this, package);
+                    File.Copy(e.FullPath, destinationPath, true);
+                    _logger.LogInformation($"Package copied to packages directory: {destinationPath}");
+
+                    // Delete the original file from incoming directory
+                    File.Delete(e.FullPath);
+
+                    UpdatePackage package = new UpdatePackage
+                    {
+                        FilePath = destinationPath,
+                        Version = ExtractVersionFromFileName(Path.GetFileName(e.FullPath))
+                    };
+                    PackageDetected?.Invoke(this, package);
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogError(ex, $"Failed to copy package to packages directory: {e.FullPath}");
+                }
             }
             else
             {
@@ -71,7 +91,6 @@ namespace UpFlux.Update.Service.Services
                 }
                 catch (IOException)
                 {
-                    // The file is still locked, wait and retry
                     Thread.Sleep(delayMilliseconds);
                 }
             }

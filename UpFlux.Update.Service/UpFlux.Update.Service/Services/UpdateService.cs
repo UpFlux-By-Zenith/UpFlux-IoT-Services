@@ -50,26 +50,13 @@ namespace UpFlux.Update.Service.Services
             _logger.LogInformation("UpFlux Update Service is starting.");
 
             // Start the TCP listener
-            _tcpListenerService.PackageReceived += async (sender, package) => await OnPackageReceived(sender, package);
             _tcpListenerService.StartListening(_config.GatewayServerPort);
 
             // Start the file system watcher
-            _fileWatcherService.PackageDetected += async (sender, package) => await OnPackageDetected(sender, package);
-            _fileWatcherService.StartWatching(_config.PackageDirectory);
+            _fileWatcherService.PackageDetected += async (sender, package) => await HandlePackageAsync(package);
+            _fileWatcherService.StartWatching();
 
             await Task.CompletedTask;
-        }
-
-        private async Task OnPackageReceived(object sender, UpdatePackage package)
-        {
-            _logger.LogInformation($"Package received: {package.FilePath}");
-            await HandlePackageAsync(package);
-        }
-
-        private async Task OnPackageDetected(object sender, UpdatePackage package)
-        {
-            _logger.LogInformation($"Package detected: {package.FilePath}");
-            await HandlePackageAsync(package);
         }
 
         private async Task HandlePackageAsync(UpdatePackage package)
@@ -82,7 +69,7 @@ namespace UpFlux.Update.Service.Services
                     return;
                 }
 
-                // Store the package
+                // Store the package (clean old versions)
                 _versionManager.StorePackage(package);
 
                 // Perform simulation
