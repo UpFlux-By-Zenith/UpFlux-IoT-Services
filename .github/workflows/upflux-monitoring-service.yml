@@ -117,7 +117,7 @@ jobs:
         chmod -R 755 /opt/upflux-monitoring-service/sensors_script
         
         # Set permissions on the python sensor scripts
-        chmod +x /opt/upflux-monitoring-service/UpFlux.Monitoring.Service/sensors_script/*
+        chmod +x /opt/upflux-monitoring-service/sensors_script/*
 
         # Create the log directory if it doesn't exist
         mkdir -p /var/log/upflux/
