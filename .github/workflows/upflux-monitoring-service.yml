@@ -29,7 +29,7 @@ jobs:
     # Configure GitHub Packages as a NuGet source
     - name: Configure GitHub Packages NuGet Source
       run: |
-        dotnet nuget add source "https://nuget.pkg.github.com/UpFlux-By-The-Boys/index.json" \
+        dotnet nuget add source "https://nuget.pkg.github.com/UpFlux-By-Zenith/index.json" \
           --name "github" \
           --username "PatrickOrjieh" \
           --password "${{ secrets.MY_GITHUB_PAT }}" \
@@ -219,7 +219,7 @@ jobs:
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         echo "Publishing NuGet package to GitHub Packages..."
-        dotnet nuget push UpFlux.Monitoring.Service.${{ env.version }}.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-The-Boys/index.json"
+        dotnet nuget push UpFlux.Monitoring.Service.${{ env.version }}.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-Zenith/index.json"
 
     - name: Upload NuGet Package Artifact
       if: github.event_name == 'workflow_dispatch'
