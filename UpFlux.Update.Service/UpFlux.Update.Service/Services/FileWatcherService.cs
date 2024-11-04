@@ -33,6 +33,7 @@ namespace UpFlux.Update.Service.Services
         /// </summary>
         public void StartWatching(string directory)
         {
+            _logger.LogInformation("File Watcher started.");
             _watcher = new FileSystemWatcher(directory, _config.PackageNamePattern)
             {
                 EnableRaisingEvents = true,

@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UpFlux.Update.Service.Models;
+using Microsoft.Extensions.Options;
 
 namespace UpFlux.Update.Service.Utilities
 {
@@ -18,9 +19,12 @@ namespace UpFlux.Update.Service.Utilities
     {
         private readonly Configuration _config;
 
-        public VersionManager(Configuration config)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="VersionManager"/> class with configuration settings.
+        /// </summary>
+        public VersionManager(IOptions<Configuration> config)
         {
-            _config = config;
+            _config = config.Value;
             Directory.CreateDirectory(_config.PackageDirectory);
         }
 
