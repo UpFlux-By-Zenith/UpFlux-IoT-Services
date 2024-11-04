@@ -5,7 +5,7 @@ import RPi.GPIO as GPIO
 import time
 import logging
 
-LOG_FILE = '/var/log/upflux.log'
+LOG_FILE = '/var/log/upflux/upflux-sensors.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, 
                     format='%(asctime)s %(levelname)s:%(message)s')
 
@@ -105,6 +105,19 @@ class ColorSensor:
                 print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
 
                 print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
+                
+                # Create a dictionary with the RGB values
+                sensor_data = {
+                    "red_value": red_value,
+                    "green_value": green_value,
+                    "blue_value": blue_value
+                }
+
+                # Output the JSON-formatted sensor data
+                print(json.dumps(sensor_data))
+
+                # Log the sensor data if needed
+                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
 
                 if self.buzzer_condition(red_value, green_value, blue_value):
                     print("Buzzer activated")
