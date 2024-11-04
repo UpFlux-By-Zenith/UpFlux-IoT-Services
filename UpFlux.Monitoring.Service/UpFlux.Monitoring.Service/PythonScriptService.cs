@@ -44,7 +44,7 @@ namespace UpFlux.Monitoring.Service
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
                     FileName = "python3",
-                    Arguments = _scriptPath,
+                    Arguments = $"-u {_scriptPath}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -62,7 +62,7 @@ namespace UpFlux.Monitoring.Service
                     if (!string.IsNullOrEmpty(args.Data))
                     {
                         _latestSensorData = args.Data;
-                        _logger.LogInformation("Sensor data received: {Data}", args.Data);
+                        //_logger.LogInformation("Sensor data received: {Data}", args.Data);
                     }
                 };
 

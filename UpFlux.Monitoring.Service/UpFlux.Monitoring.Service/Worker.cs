@@ -58,16 +58,35 @@ namespace UpFlux.Monitoring.Service
                     // Get the latest sensor data
                     string sensorData = _pythonScriptService.GetLatestSensorData();
 
+                    SensorData sensorValues = null;
+                    if (!string.IsNullOrEmpty(sensorData))
+                    {
+                        try
+                        {
+                            sensorValues = JsonSerializer.Deserialize<SensorData>(sensorData);
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogError(ex, "Failed to deserialize sensor data.");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No sensor data received.");
+                    }
+
                     // Combine the data into one JSON object
                     var combinedData = new
                     {
                         Metrics = metrics,
-                        SensorData = sensorData
+                        SensorData = sensorValues
                     };
                     string jsonData = JsonSerializer.Serialize(combinedData);
 
                     // Send the data via TCP
                     _tcpClientService.SendData(jsonData);
+
+                    _logger.LogInformation("Data: {data}", jsonData);
 
                     _logger.LogInformation("Data sent successfully at: {time}", DateTimeOffset.Now);
                 }

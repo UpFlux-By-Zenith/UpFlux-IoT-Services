@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-UpFlux.Monitoring.Service-4a41ac66-8b46-4063-b381-cba13760b7ea</UserSecretsId>
+	<OutputType>Exe</OutputType>
+	<Platform>Any CPU</Platform>
+	<RuntimeIdentifier>linux-arm</RuntimeIdentifier>
+	<RuntimeIdentifiers>linux-arm;linux-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
