@@ -12,7 +12,7 @@ YELLOW_LED = 13
 RED_LED = 5
 
 DPKG_LOG_PATH = '/var/log/dpkg.log'
-UPFLUX_LOG_PATH = '/var/log/upflux.log'
+UPFLUX_LOG_PATH = '/var/log/upflux/upflux-sensors.log'
 
 GPIO.setup(GREEN_LED, GPIO.OUT)
 GPIO.setup(YELLOW_LED, GPIO.OUT)

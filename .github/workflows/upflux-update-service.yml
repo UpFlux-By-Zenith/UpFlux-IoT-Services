@@ -1,0 +1,208 @@
+name: UpFlux Update Service Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'UpFlux.Update.Service/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Set up .NET
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.x'
+
+    # Install dependencies
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y fakeroot dpkg-dev
+
+    # Read version from version.txt
+    - name: Read Version from version.txt
+      id: version
+      run: |
+        if [ -f ./UpFlux.Update.Service/version.txt ]; then
+          version=$(cat ./UpFlux.Update.Service/version.txt)
+        else
+          version="1.0.0"  # Default starting version
+        fi
+        echo "version=$version" >> $GITHUB_ENV
+
+    # Restore dependencies and build the service
+    - name: Restore and Build Service
+      run: dotnet publish ./UpFlux.Update.Service/UpFlux.Update.Service/UpFlux.Update.Service.csproj -r linux-arm -c Release -o ./publish --self-contained true
+
+    # Create the Debian package directory structure
+    - name: Prepare Debian package structure
+      run: |
+        mkdir -p debian/package/DEBIAN
+        mkdir -p debian/package/opt/upflux-update-service
+        mkdir -p debian/package/etc/systemd/system/
+        mkdir -p debian/package/var/log/upflux/
+
+        # Copy the application files
+        cp -r ./publish/* debian/package/opt/upflux-update-service/
+
+    # Create systemd service file
+    - name: Create systemd service file
+      run: |
+        cat <<EOF > debian/package/etc/systemd/system/upflux-update.service
+        [Unit]
+        Description=UpFlux Update Service
+        After=network.target
+
+        [Service]
+        Type=simple
+        ExecStart=/opt/upflux-update-service/UpFlux.Update.Service
+        WorkingDirectory=/opt/upflux-update-service
+        StandardOutput=append:/var/log/upflux/upflux-update-service.log
+        StandardError=append:/var/log/upflux/upflux-update-service-error.log
+        Restart=always
+        User=root
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+
+    # Create the DEBIAN control file
+    - name: Create Debian control file
+      run: |
+        cat <<EOF > debian/package/DEBIAN/control
+        Package: upflux-update-service
+        Version: ${{ env.version }}
+        Section: base
+        Priority: optional
+        Architecture: armhf
+        Essential: no
+        Maintainer: Patrick Orjieh <orjiehpatrick@gmail.com>
+        Description: UpFlux Update Service
+        EOF
+
+    # Create the postinst script
+    - name: Create postinst script
+      run: |
+        cat <<EOF > debian/package/DEBIAN/postinst
+        #!/bin/bash
+        set -e
+
+        # Set permissions on the executable
+        chmod +x /opt/upflux-update-service/UpFlux.Update.Service
+
+        # Create the log directory if it doesn't exist
+        mkdir -p /var/log/upflux/
+        chmod 755 /var/log/upflux/
+
+        # Reload systemd daemon
+        systemctl daemon-reload
+
+        # Restart the service on upgrade
+        if [ "\$1" = "configure" ] && [ -n "\$2" ]; then
+          # Upgrading
+          systemctl restart upflux-monitoring.service
+        else
+          # New installation
+          systemctl enable upflux-monitoring.service
+          systemctl start upflux-monitoring.service
+        fi
+
+        exit 0
+        EOF
+        chmod 755 debian/package/DEBIAN/postinst
+
+    # Create the prerm script
+    - name: Create prerm script
+      run: |
+        cat <<EOF > debian/package/DEBIAN/prerm
+        #!/bin/bash
+        set -e
+
+        # Stop and disable the service
+        systemctl stop upflux-update.service || true
+        systemctl disable upflux-update.service || true
+
+        exit 0
+        EOF
+        chmod 755 debian/package/DEBIAN/prerm
+
+    # Create the postrm script
+    - name: Create postrm script
+      run: |
+        cat <<EOF > debian/package/DEBIAN/postrm
+        #!/bin/bash
+        set -e
+
+        if [ "\$1" = "purge" ]; then
+          # Remove the service file
+          rm -f /etc/systemd/system/upflux-update.service
+
+          # Remove application files
+          rm -rf /opt/upflux-update-service
+
+          # Remove log directory
+          # rm -rf /var/log/upflux/
+
+          systemctl daemon-reload
+        fi
+
+        exit 0
+        EOF
+        chmod 755 debian/package/DEBIAN/postrm
+
+    # Build the Debian package
+    - name: Build Debian package
+      run: |
+        dpkg-deb --build debian/package upflux-update-service_${{ env.version }}_armhf.deb
+
+    # Create .nuspec file
+    - name: Create .nuspec file
+      run: |
+        cat <<EOF > UpFlux.Update.Service.nuspec
+        <?xml version="1.0"?>
+        <package>
+          <metadata>
+            <id>UpFlux.Update.Service</id>
+            <version>${{ env.version }}</version>
+            <authors>Patrick Orjieh</authors>
+            <owners>Patrick Orjieh</owners>
+            <requireLicenseAcceptance>false</requireLicenseAcceptance>
+            <description>UpFlux Update Service Debian Package</description>
+            <tags>UpFlux Update Service Debian Package</tags>
+          </metadata>
+          <files>
+            <file src="upflux-update-service_${{ env.version }}_armhf.deb" target="content" />
+          </files>
+        </package>
+        EOF
+
+    # Package the .deb into a NuGet package
+    - name: Create NuGet package
+      run: nuget pack UpFlux.Update.Service.nuspec
+
+    # Conditionally publish based on whether it's an automatic trigger or manual
+    - name: Publish NuGet Package to GitHub Packages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        echo "Publishing NuGet package to GitHub Packages..."
+        dotnet nuget push UpFlux.Update.Service.${{ env.version }}.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-The-Boys/index.json"
+
+    - name: Upload NuGet Package Artifact
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v3
+      with:
+        name: upflux-update-service-nuget-package
+        path: UpFlux.Update.Service.${{ env.version }}.nupkg

@@ -4,8 +4,9 @@ module for reading color RGB values using TCS3200 Color Sensor and activating a 
 import RPi.GPIO as GPIO
 import time
 import logging
+import json
 
-LOG_FILE = '/var/log/upflux.log'
+LOG_FILE = '/var/log/upflux/upflux-sensors.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, 
                     format='%(asctime)s %(levelname)s:%(message)s')
 
@@ -94,20 +95,33 @@ class ColorSensor:
             try:
                 red_freq = self.measure_color_frequency('red')
                 red_value = self.map_frequency_to_rgb(red_freq, 'red')
-                print(f"Red frequency: {red_freq} Hz -> RGB value: {red_value}")
+                #print(f"Red frequency: {red_freq} Hz -> RGB value: {red_value}")
 
                 blue_freq = self.measure_color_frequency('blue')
                 blue_value = self.map_frequency_to_rgb(blue_freq, 'blue')
-                print(f"Blue frequency: {blue_freq} Hz -> RGB value: {blue_value}")
+                #print(f"Blue frequency: {blue_freq} Hz -> RGB value: {blue_value}")
 
                 green_freq = self.measure_color_frequency('green')
                 green_value = self.map_frequency_to_rgb(green_freq, 'green')
-                print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
+                #print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
 
-                print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
+                #print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
+                
+                # Create a dictionary with the RGB values
+                sensor_data = {
+                    "red_value": red_value,
+                    "green_value": green_value,
+                    "blue_value": blue_value
+                }
+
+                # Output the JSON-formatted sensor data
+                print(json.dumps(sensor_data), flush=True)
+
+                # Log the sensor data if needed
+                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
 
                 if self.buzzer_condition(red_value, green_value, blue_value):
-                    print("Buzzer activated")
+                    #print("Buzzer activated")
                     logging.error(
                         f"buzzer activated due to Invalid Color"
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
