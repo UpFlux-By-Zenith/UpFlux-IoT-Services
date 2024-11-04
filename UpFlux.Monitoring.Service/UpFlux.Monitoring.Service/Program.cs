@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting.Systemd;
 using UpFlux.Monitoring.Library;
 using UpFlux.Monitoring.Library.Interfaces;
 using UpFlux.Monitoring.Library.Services;
@@ -58,6 +59,7 @@ namespace UpFlux.Monitoring.Service
         /// </summary>
         public static IHostBuilder CreateHostBuilder(string[] args, IConfiguration configuration) =>
             Host.CreateDefaultBuilder(args)
+                .UseSystemd() // Enable systemd integration
                 .UseSerilog() // Use Serilog for logging
                 .ConfigureServices((hostContext, services) =>
                 {
