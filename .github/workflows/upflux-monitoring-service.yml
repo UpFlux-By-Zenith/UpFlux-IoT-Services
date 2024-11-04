@@ -39,7 +39,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y sysstat fakeroot dpkg-dev nuget
+        sudo apt-get install -y sysstat fakeroot dpkg-dev nuget tar
 
     # Read version from version.txt
     - name: Read Version from version.txt
@@ -179,10 +179,15 @@ jobs:
         EOF
         chmod 755 debian/package/DEBIAN/postrm
 
-    # Build the Debian package
-    - name: Build Debian package
+    # Build the Debian package with gzip compression
+    - name: Build Debian package with gzip compression
       run: |
-        dpkg-deb --build debian/package upflux-monitoring-service_${{ env.version }}_armhf.deb
+        cd debian/package
+        tar --format=gnu -czf control.tar.gz -C DEBIAN .
+        tar --format=gnu -czf data.tar.gz -C . opt etc var
+        echo "2.0" > debian-binary
+        ar rcs upflux-monitoring-service_${{ env.version }}_armhf.deb debian-binary control.tar.gz data.tar.gz
+        mv upflux-monitoring-service_${{ env.version }}_armhf.deb ../../upflux-monitoring-service_${{ env.version }}_armhf.deb
 
     # Create .nuspec file
     - name: Create .nuspec file
