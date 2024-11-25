@@ -7,6 +7,11 @@ using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting.Systemd;
 using UpFlux.Gateway.Server.Models;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Grpc.Core;
+using UpFlux.Gateway.Server.Services;
+using UpFlux.Gateway.Server.Repositories;
 
 namespace UpFlux.Gateway.Server
 {
@@ -39,6 +44,20 @@ namespace UpFlux.Gateway.Server
                 IHost host = Host.CreateDefaultBuilder(args)
                     .UseSystemd() // Enable systemd integration
                     .UseSerilog() // Use Serilog for logging
+                    .ConfigureWebHostDefaults(webBuilder =>
+                    {
+                        webBuilder.ConfigureKestrel(serverOptions =>
+                        {
+                            // Configure Kestrel server options
+                            serverOptions.ListenAnyIP(5001, listenOptions =>
+                            {
+                                listenOptions.Protocols = HttpProtocols.Http2;
+                                // Eventually use TLS to configure
+                                // listenOptions.UseHttps("path_to_certificate.pfx", "password");
+                            });
+                        });
+                        webBuilder.UseStartup<Startup>();
+                    })
                     .ConfigureServices((hostContext, services) =>
                     {
                         // Bind configuration to GatewaySettings
@@ -47,8 +66,16 @@ namespace UpFlux.Gateway.Server
                         // Register the Worker service
                         services.AddHostedService<Worker>();
 
-                        // Register other services here eventually
+                        // Register other services as needed
+                        // Register the DeviceDiscoveryService
+                        services.AddHostedService<DeviceDiscoveryService>();
 
+                        services.AddSingleton<DeviceCommunicationService>();
+                        services.AddSingleton<DeviceRepository>();
+                        services.AddSingleton<LicenseValidationService>();
+                        services.AddSingleton<DataAggregationService>();
+                        services.AddSingleton<CloudCommunicationService>();
+                        services.AddSingleton<UpdateManagementService>();
                     })
                     .Build();
 
