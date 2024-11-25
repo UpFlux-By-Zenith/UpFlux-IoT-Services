@@ -39,5 +39,6 @@
 	<ItemGroup>
 		<Protobuf Include="Protos\license.proto" GrpcServices="Client" />
 		<Protobuf Include="Protos\monitoring.proto" GrpcServices="Client" />
+		<Protobuf Include="Protos\update.proto" GrpcServices="Server" />
 	</ItemGroup>
 </Project>

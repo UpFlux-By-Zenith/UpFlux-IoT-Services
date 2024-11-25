@@ -60,6 +60,16 @@ namespace UpFlux.Gateway.Server.Models
         /// Gets or sets the interval in seconds for data aggregation.
         /// </summary>
         public int DataAggregationIntervalSeconds { get; set; } = 300; // Default to 5 minutes
+
+        /// <summary>
+        /// Gets or sets the path to the public key used to verify update packages.
+        /// </summary>
+        public string UpdatePackagePublicKeyPath { get; set; }
+
+        /// <summary>
+        /// Gets or sets the maximum number of retries for sending updates to devices.
+        /// </summary>
+        public int UpdateMaxRetries { get; set; } = 3;
     }
 }
 

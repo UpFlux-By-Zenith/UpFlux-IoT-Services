@@ -440,5 +440,80 @@ namespace UpFlux.Gateway.Server.Services
                 _logger.LogError(ex, "Failed to send license to device UUID: {uuid}", uuid);
             }
         }
+
+        /// <summary>
+        /// Sends an update package to a device.
+        /// </summary>
+        /// <param name="deviceUuid">The UUID of the device.</param>
+        /// <param name="packageFilePath">The file path of the update package.</param>
+        /// <returns>A task representing the asynchronous operation, returning true if successful.</returns>
+        public async Task<bool> SendUpdatePackageAsync(string deviceUuid, string packageFilePath)
+        {
+            Device device = _deviceRepository.GetDeviceByUuid(deviceUuid);
+            if (device == null)
+            {
+                _logger.LogWarning("Device with UUID '{uuid}' not found.", deviceUuid);
+                return false;
+            }
+
+            try
+            {
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
+
+                // Authenticate as server
+                await sslStream.AuthenticateAsServerAsync(
+                    _serverCertificate,
+                    clientCertificateRequired: true,
+                    enabledSslProtocols: System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
+
+                // Send update package command
+                string commandMessage = "UPDATE_PACKAGE\n";
+                byte[] commandBytes = System.Text.Encoding.UTF8.GetBytes(commandMessage);
+                await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Wait for device acknowledgment
+                byte[] buffer = new byte[1024];
+                int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                string responseMessage = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
+
+                if (responseMessage != "READY_FOR_UPDATE")
+                {
+                    _logger.LogWarning("Device {uuid} is not ready for update.", deviceUuid);
+                    return false;
+                }
+
+                // Send the update package file
+                byte[] fileBytes = File.ReadAllBytes(packageFilePath);
+                int fileLength = fileBytes.Length;
+
+                // Send the length of the file (as 4-byte integer)
+                byte[] fileLengthBytes = BitConverter.GetBytes(fileLength);
+                await sslStream.WriteAsync(fileLengthBytes, 0, fileLengthBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Send the file bytes
+                await sslStream.WriteAsync(fileBytes, 0, fileBytes.Length);
+                await sslStream.FlushAsync();
+
+                _logger.LogInformation("Update package sent to device {uuid}", deviceUuid);
+
+                // Might implement a wait back message to confirm installation
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send update package to device UUID: {uuid}", deviceUuid);
+                return false;
+            }
+        }
     }
 }
