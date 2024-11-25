@@ -5,7 +5,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UpFlux.Gateway.Server.Models;
 using UpFlux.Gateway.Server.Repositories;
+using UpFlux.Gateway.Server.Protos;
 using UpFlux.Gateway.Server.Services;
+using System.Globalization;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -46,12 +48,12 @@ namespace UpFlux.Gateway.Server.Services
         /// Validates the license for a device with the specified UUID.
         /// </summary>
         /// <param name="uuid">The device UUID.</param>
-        /// <returns>A task representing the validation operation.</returns>
-        public async Task ValidateLicenseAsync(string uuid)
+        /// <returns>A task representing the validation operation, with a boolean result indicating if the license is valid.</returns>
+        public async Task<bool> ValidateLicenseAsync(string uuid)
         {
             _logger.LogInformation("Validating license for device UUID: {uuid}", uuid);
 
-            var device = _deviceRepository.GetDeviceByUuid(uuid);
+            Device device = _deviceRepository.GetDeviceByUuid(uuid);
 
             if (device == null)
             {
@@ -66,8 +68,14 @@ namespace UpFlux.Gateway.Server.Services
             else
             {
                 _logger.LogInformation("Device UUID: {uuid} has a valid license.", uuid);
-                // License is valid; no action needed.
+                return true;
             }
+
+            // Refresh device info
+            device = _deviceRepository.GetDeviceByUuid(uuid);
+
+            // Return the license validity status
+            return device.LicenseExpiration > DateTime.UtcNow;
         }
 
         /// <summary>
@@ -79,15 +87,15 @@ namespace UpFlux.Gateway.Server.Services
         {
             try
             {
-                var licenseResponse = await _cloudCommunicationService.RegisterDeviceAsync(uuid);
+                DeviceRegistrationResponse licenseResponse = await _cloudCommunicationService.RegisterDeviceAsync(uuid);
 
                 if (licenseResponse.Approved)
                 {
-                    var device = new Device
+                    Device device = new Device
                     {
                         UUID = uuid,
                         License = licenseResponse.License,
-                        LicenseExpiration = licenseResponse.ExpirationDate
+                        LicenseExpiration = DateTime.Parse(licenseResponse.ExpirationDate,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
                     };
 
                     _deviceRepository.AddOrUpdateDevice(device);
@@ -117,12 +125,12 @@ namespace UpFlux.Gateway.Server.Services
         {
             try
             {
-                var renewalResponse = await _cloudCommunicationService.RenewLicenseAsync(device.UUID);
+                LicenseRenewalResponse renewalResponse = await _cloudCommunicationService.RenewLicenseAsync(device.UUID);
 
                 if (renewalResponse.Approved)
                 {
                     device.License = renewalResponse.License;
-                    device.LicenseExpiration = renewalResponse.ExpirationDate;
+                    device.LicenseExpiration = DateTime.Parse(renewalResponse.ExpirationDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
                     _deviceRepository.AddOrUpdateDevice(device);
 
@@ -155,9 +163,9 @@ namespace UpFlux.Gateway.Server.Services
             {
                 try
                 {
-                    var devices = _deviceRepository.GetAllDevices();
+                    List<Device> devices = _deviceRepository.GetAllDevices();
 
-                    foreach (var device in devices)
+                    foreach (Device device in devices)
                     {
                         // Check if the license is expiring within the next day
                         if (device.LicenseExpiration <= DateTime.UtcNow.AddDays(1))

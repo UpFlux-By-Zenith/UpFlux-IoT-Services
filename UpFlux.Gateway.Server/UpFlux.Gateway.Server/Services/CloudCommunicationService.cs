@@ -35,7 +35,7 @@ namespace UpFlux.Gateway.Server.Services
             HttpClientHandler handler = new HttpClientHandler();
             handler.ClientCertificates.Add(new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword));
 
-            // Trust the cloud server's certificate (optional if using a trusted CA)
+            // Trust the cloud server's certificate (optional if using a trusted CA - we need to decide as a team)
             handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
 
             HttpClient httpClient = new HttpClient(handler);

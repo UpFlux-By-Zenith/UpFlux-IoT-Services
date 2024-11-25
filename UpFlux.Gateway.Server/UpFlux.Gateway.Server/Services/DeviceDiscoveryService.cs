@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UpFlux.Gateway.Server.Models;
 using UpFlux.Gateway.Server.Services;
+using UpFlux.Gateway.Server.Repositories;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -46,7 +47,7 @@ namespace UpFlux.Gateway.Server.Services
             _deviceRepository = deviceRepository;
 
             // Initialize known devices from the repository
-            var devices = _deviceRepository.GetAllDevices();
+            List<Device> devices = _deviceRepository.GetAllDevices();
             _knownDevices = new ConcurrentDictionary<string, Device>(devices.ToDictionary(d => d.IPAddress));
         }
 
@@ -117,7 +118,7 @@ namespace UpFlux.Gateway.Server.Services
                     await _deviceCommunicationService.InitiateSecureConnectionAsync(ip);
 
                     // Add to known devices (Placeholder device object)
-                    var device = new Device { IPAddress = ip };
+                    Device device = new Device { IPAddress = ip };
                     _knownDevices.TryAdd(ip, device);
 
                     // Save to the repository
