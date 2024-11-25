@@ -8,6 +8,7 @@ using UpFlux.Gateway.Server.Repositories;
 using UpFlux.Gateway.Server.Protos;
 using UpFlux.Gateway.Server.Services;
 using System.Globalization;
+using Google.Protobuf.WellKnownTypes;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -95,7 +96,7 @@ namespace UpFlux.Gateway.Server.Services
                     {
                         UUID = uuid,
                         License = licenseResponse.License,
-                        LicenseExpiration = DateTime.Parse(licenseResponse.ExpirationDate,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
+                        LicenseExpiration = licenseResponse.ExpirationDate.ToDateTime()
                     };
 
                     _deviceRepository.AddOrUpdateDevice(device);
@@ -130,7 +131,7 @@ namespace UpFlux.Gateway.Server.Services
                 if (renewalResponse.Approved)
                 {
                     device.License = renewalResponse.License;
-                    device.LicenseExpiration = DateTime.Parse(renewalResponse.ExpirationDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                    device.LicenseExpiration = renewalResponse.ExpirationDate.ToDateTime();
 
                     _deviceRepository.AddOrUpdateDevice(device);
 

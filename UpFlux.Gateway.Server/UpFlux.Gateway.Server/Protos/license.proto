@@ -2,6 +2,8 @@
 
 option csharp_namespace = "UpFlux.Gateway.Server.Protos";
 
+import "google/protobuf/timestamp.proto";
+
 package license;
 
 // Service definition for license operations
@@ -19,7 +21,7 @@ message DeviceRegistrationRequest {
 message DeviceRegistrationResponse {
   bool approved = 1;
   string license = 2;
-  string expirationDate = 3; // ISO 8601 formatted date string
+  google.protobuf.Timestamp expirationDate = 3;
 }
 
 message LicenseRenewalRequest {
@@ -29,5 +31,5 @@ message LicenseRenewalRequest {
 message LicenseRenewalResponse {
   bool approved = 1;
   string license = 2;
-  string expirationDate = 3; // ISO 8601 formatted date string
+  google.protobuf.Timestamp expirationDate = 3;
 }

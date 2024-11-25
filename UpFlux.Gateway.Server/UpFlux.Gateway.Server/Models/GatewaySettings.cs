@@ -55,6 +55,11 @@ namespace UpFlux.Gateway.Server.Models
         /// Gets or sets the TCP port on which the Gateway Server listens for device connections.
         /// </summary>
         public int TcpPort { get; set; } = 5000;
+
+        /// <summary>
+        /// Gets or sets the interval in seconds for data aggregation.
+        /// </summary>
+        public int DataAggregationIntervalSeconds { get; set; } = 300; // Default to 5 minutes
     }
 }
 

@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using UpFlux.Gateway.Server.Models;
 using UpFlux.Gateway.Server.Repositories;
 
@@ -23,6 +24,8 @@ namespace UpFlux.Gateway.Server.Services
         private readonly X509Certificate2 _serverCertificate;
         private readonly X509Certificate2 _trustedCaCertificate;
 
+        private readonly DataAggregationService _dataAggregationService;
+
         private TcpListener _listener;
 
         /// <summary>
@@ -36,7 +39,8 @@ namespace UpFlux.Gateway.Server.Services
             ILogger<DeviceCommunicationService> logger,
             IOptions<GatewaySettings> settings,
             LicenseValidationService licenseValidationService,
-            DeviceRepository deviceRepository)
+            DeviceRepository deviceRepository,
+            DataAggregationService dataAggregationService)
         {
             _logger = logger;
             _settings = settings.Value;
@@ -48,6 +52,7 @@ namespace UpFlux.Gateway.Server.Services
 
             // Load trusted CA certificate
             _trustedCaCertificate = new X509Certificate2(_settings.TrustedCaCertificatePath);
+            _dataAggregationService = dataAggregationService;
         }
 
         /// <summary>
@@ -175,6 +180,10 @@ namespace UpFlux.Gateway.Server.Services
                 chain.ChainPolicy.ExtraStore.Add(_trustedCaCertificate);
                 chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+                // Certificate Revocation Check during TLS handshake
+                // chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+                // chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
 
                 bool isValid = chain.Build((X509Certificate2)certificate);
                 if (!isValid)
@@ -336,16 +345,34 @@ namespace UpFlux.Gateway.Server.Services
         /// <returns>A task representing the processing operation.</returns>
         private async Task ProcessDeviceDataAsync(Device device, string data)
         {
-            // Parse and log the data from the device
-            // To be replaced with actual data processing logic
+            try
+            {
+                // Deserialize the JSON data into MonitoringData object
+                MonitoringData? monitoringData = JsonConvert.DeserializeObject<MonitoringData>(data);
 
-            _logger.LogInformation("Processing data from device UUID: {uuid}", device.UUID);
+                // Validate the data
+                if (monitoringData == null || monitoringData.UUID != device.UUID)
+                {
+                    _logger.LogWarning("Invalid monitoring data received from device UUID: {uuid}", device.UUID);
+                    return;
+                }
 
-            // TODO: Implement data processing
+                // Add data to aggregation service
+                _dataAggregationService.AddMonitoringData(monitoringData);
+
+                _logger.LogInformation("Monitoring data from device UUID: {uuid} processed successfully.", device.UUID);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to parse monitoring data from device UUID: {uuid}", device.UUID);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing monitoring data from device UUID: {uuid}", device.UUID);
+            }
 
             await Task.CompletedTask;
         }
-
 
         /// <summary>
         /// Requests the UUID from the connected device.
