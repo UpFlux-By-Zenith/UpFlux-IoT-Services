@@ -1,0 +1,23 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+package update;
+
+import "google/protobuf/empty.proto";
+
+// Service definition for update distribution
+service UpdateService {
+  rpc SendUpdatePackage (UpdatePackageRequest) returns (google.protobuf.Empty);
+}
+
+// Message definitions
+
+message UpdatePackageRequest {
+  string packageId = 1;
+  string version = 2;
+  string fileName = 3;
+  bytes packageData = 4;
+  bytes signature = 5;
+  repeated string targetDevices = 6;
+}

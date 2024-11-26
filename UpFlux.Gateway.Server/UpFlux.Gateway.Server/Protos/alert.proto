@@ -1,0 +1,24 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+package alertservice;
+
+import "google/protobuf/timestamp.proto";
+
+service AlertService {
+  rpc SendAlert (AlertRequest) returns (AlertResponse);
+}
+
+message AlertRequest {
+  google.protobuf.Timestamp timestamp = 1;
+  string level = 2;
+  string message = 3;
+  string exception = 4;
+  string source = 5;
+}
+
+message AlertResponse {
+  bool success = 1;
+  string message = 2;
+}

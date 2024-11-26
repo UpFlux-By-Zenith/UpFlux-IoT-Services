@@ -9,11 +9,15 @@ UpFlux.Monitoring.Service/UpFlux.Monitoring.Service/obj
 UpFlux.Monitoring.Service/UpFlux.Monitoring.Service/bin
 UpFlux.Update.Service/UpFlux.Update.Service/obj
 UpFlux.Update.Service/UpFlux.Update.Service/bin
+UpFlux.Gateway.Server/UpFlux.Gateway.Server/obj
+UpFlux.Gateway.Server/UpFlux.Gateway.Server/bin
+UpFlux.Gateway.Server/UpFlux.Gateway.Server/Certificates/
 
 # Visual Studio
 UpFlux.Monitoring.Library/.vs/
 UpFlux.Monitoring.Service/.vs/
 UpFlux.Update.Service/.vs/
+UpFlux.Gateway.Server/.vs/
 .vs
 
 # Publish Profile User
