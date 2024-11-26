@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -575,6 +576,64 @@ namespace UpFlux.Gateway.Server.Services
             {
                 _logger.LogError(ex, "Failed to send rollback command to device UUID: {uuid}", deviceUuid);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Requests the current software version from a device.
+        /// </summary>
+        /// <param name="device">The device to query.</param>
+        /// <returns>A task representing the asynchronous operation, returning the VersionInfo.</returns>
+        public async Task<VersionInfo> RequestVersionInfoAsync(Device device)
+        {
+            try
+            {
+                using var client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+
+                using var networkStream = client.GetStream();
+                using var sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
+
+                // Authenticate as server
+                await sslStream.AuthenticateAsServerAsync(
+                    _serverCertificate,
+                    clientCertificateRequired: true,
+                    enabledSslProtocols: System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
+
+                // Send version request command
+                var commandMessage = "GET_VERSION\n";
+                var commandBytes = Encoding.UTF8.GetBytes(commandMessage);
+                await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Wait for device response
+                var buffer = new byte[1024];
+                int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                var responseMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
+
+                if (string.IsNullOrWhiteSpace(responseMessage))
+                {
+                    _logger.LogWarning("Device {uuid} returned empty version information.", device.UUID);
+                    return null;
+                }
+
+                // Create VersionInfo object
+                var versionInfo = new VersionInfo
+                {
+                    DeviceUUID = device.UUID,
+                    Version = responseMessage,
+                    RetrievedAt = DateTime.UtcNow
+                };
+
+                return versionInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to retrieve version information from device UUID: {uuid}", device.UUID);
+                return null;
             }
         }
     }
