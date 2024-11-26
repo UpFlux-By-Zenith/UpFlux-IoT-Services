@@ -26,6 +26,7 @@ namespace UpFlux.Gateway.Server.Services
         private readonly AsyncRetryPolicy _retryPolicy;
         private readonly MonitoringService.MonitoringServiceClient _monitoringClient;
         private readonly CloudLogService.CloudLogServiceClient _cloudLogClient;
+        private readonly AlertService.AlertServiceClient _alertClient;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CloudCommunicationService"/> class.
@@ -34,10 +35,12 @@ namespace UpFlux.Gateway.Server.Services
         /// <param name="settings">Gateway settings.</param>
         public CloudCommunicationService(
             ILogger<CloudCommunicationService> logger,
-            IOptions<GatewaySettings> settings)
+            IOptions<GatewaySettings> settings,
+            AlertService.AlertServiceClient alertClient)
         {
             _logger = logger;
             _settings = settings.Value;
+            _alertClient = alertClient;
 
             HttpClientHandler handler = new HttpClientHandler();
             handler.ClientCertificates.Add(new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword));
@@ -262,6 +265,49 @@ namespace UpFlux.Gateway.Server.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during sending logs for device {uuid}.", deviceUuid);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Sends an alert to the cloud.
+        /// </summary>
+        /// <param name="alert">The alert to send.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public async Task SendAlertAsync(Alert alert)
+        {
+            _logger.LogInformation("Sending alert to cloud: {message}", alert.Message);
+
+            try
+            {
+                AlertRequest alertRequest = new AlertRequest
+                {
+                    Timestamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(alert.Timestamp),
+                    Level = alert.Level,
+                    Message = alert.Message,
+                    Exception = alert.Exception ?? "",
+                    Source = alert.Source
+                };
+
+                AlertResponse response = await _alertClient.SendAlertAsync(alertRequest);
+
+                if (response.Success)
+                {
+                    _logger.LogInformation("Alert sent to cloud successfully.");
+                }
+                else
+                {
+                    _logger.LogWarning("Cloud responded with failure: {message}", response.Message);
+                }
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "gRPC error during sending alert to cloud.");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during sending alert to cloud.");
                 throw;
             }
         }

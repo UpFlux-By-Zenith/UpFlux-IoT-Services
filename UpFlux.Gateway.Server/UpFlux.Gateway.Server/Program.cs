@@ -9,9 +9,9 @@ using Microsoft.Extensions.Hosting.Systemd;
 using UpFlux.Gateway.Server.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Grpc.Core;
 using UpFlux.Gateway.Server.Services;
 using UpFlux.Gateway.Server.Repositories;
+using UpFlux.Gateway.Server.Utilities;
 
 namespace UpFlux.Gateway.Server
 {
@@ -26,15 +26,32 @@ namespace UpFlux.Gateway.Server
         public static void Main(string[] args)
         {
             // Build configuration
-            IConfigurationBuilder configurationBuilder = new ConfigurationBuilder()
+            IConfiguration configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
 
-            IConfiguration configuration = configurationBuilder.Build();
+            // Create a temporary ServiceCollection to build a ServiceProvider for Serilog configuration
+            ServiceCollection services = new ServiceCollection();
+
+            // Register configuration
+            services.AddSingleton<IConfiguration>(configuration);
+
+            // Register necessary services for AlertingService
+            services.Configure<GatewaySettings>(configuration.GetSection("GatewaySettings"));
+            services.AddSingleton<CloudCommunicationService>(); // Ensure dependencies are registered
+            services.AddSingleton<AlertingService>(); // Register AlertingService
+
+            // Build the ServiceProvider
+            ServiceProvider serviceProvider = services.BuildServiceProvider();
+
+            // Retrieve AlertingService from the ServiceProvider
+            AlertingService? alertingService = serviceProvider.GetService<AlertingService>();
 
             // Configure Serilog
             Log.Logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(configuration)
+                .WriteTo.Sink(new SerilogAlertingSink(null, alertingService))
                 .CreateLogger();
 
             try
@@ -52,7 +69,7 @@ namespace UpFlux.Gateway.Server
                             serverOptions.ListenAnyIP(5001, listenOptions =>
                             {
                                 listenOptions.Protocols = HttpProtocols.Http2;
-                                // Eventually use TLS to configure
+                                // Optionally configure TLS when supported
                                 // listenOptions.UseHttps("path_to_certificate.pfx", "password");
                             });
                         });
@@ -67,7 +84,6 @@ namespace UpFlux.Gateway.Server
                         services.AddHostedService<Worker>();
 
                         // Register other services as needed
-                        // Register the DeviceDiscoveryService
                         services.AddHostedService<DeviceDiscoveryService>();
 
                         services.AddSingleton<DeviceCommunicationService>();
@@ -80,6 +96,7 @@ namespace UpFlux.Gateway.Server
                         services.AddSingleton<LogCollectionService>();
                         services.AddSingleton<CommandExecutionService>();
                         services.AddSingleton<VersionControlService>();
+                        services.AddSingleton<AlertingService>();
                     })
                     .Build();
 

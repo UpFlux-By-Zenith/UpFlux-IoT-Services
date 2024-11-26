@@ -44,5 +44,6 @@
 		<Protobuf Include="Protos\version_data.proto" GrpcServices="Server" />
 		<Protobuf Include="Protos\cloud_logs.proto" GrpcServices="Client" />
 		<Protobuf Include="Protos\log_request.proto" GrpcServices="Server" />
+		<Protobuf Include="Protos\alert.proto" GrpcServices="Client" />
 	</ItemGroup>
 </Project>
