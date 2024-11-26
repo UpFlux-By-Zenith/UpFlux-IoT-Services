@@ -25,6 +25,7 @@ namespace UpFlux.Gateway.Server.Services
         private readonly LicenseService.LicenseServiceClient _client;
         private readonly AsyncRetryPolicy _retryPolicy;
         private readonly MonitoringService.MonitoringServiceClient _monitoringClient;
+        private readonly CloudLogService.CloudLogServiceClient _cloudLogClient;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CloudCommunicationService"/> class.
@@ -202,6 +203,67 @@ namespace UpFlux.Gateway.Server.Services
                     BlueValue = data.SensorData.BlueValue
                 }
             };
+        }
+
+        /// <summary>
+        /// Sends device logs to the cloud.
+        /// </summary>
+        /// <param name="deviceUuid">The UUID of the device.</param>
+        /// <param name="logFilePath">The path to the log file.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public async Task SendDeviceLogsAsync(string deviceUuid, string logFilePath)
+        {
+            _logger.LogInformation("Sending logs for device {uuid} to cloud.", deviceUuid);
+
+            try
+            {
+                using AsyncClientStreamingCall<LogUploadRequest, LogUploadResponse> call = _cloudLogClient.UploadDeviceLogs();
+
+                // Send metadata
+                await call.RequestStream.WriteAsync(new LogUploadRequest
+                {
+                    Metadata = new LogMetadata
+                    {
+                        DeviceUuid = deviceUuid,
+                        FileName = Path.GetFileName(logFilePath)
+                    }
+                });
+
+                // Send log file in chunks
+                byte[] buffer = new byte[64 * 1024]; // 64KB buffer
+                using FileStream fileStream = File.OpenRead(logFilePath);
+                int bytesRead;
+                while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await call.RequestStream.WriteAsync(new LogUploadRequest
+                    {
+                        Data = Google.Protobuf.ByteString.CopyFrom(buffer, 0, bytesRead)
+                    });
+                }
+
+                await call.RequestStream.CompleteAsync();
+
+                LogUploadResponse response = await call.ResponseAsync;
+
+                if (response.Success)
+                {
+                    _logger.LogInformation("Logs for device {uuid} sent successfully to cloud.", deviceUuid);
+                }
+                else
+                {
+                    _logger.LogWarning("Cloud responded with failure for device {uuid}: {message}", deviceUuid, response.Message);
+                }
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "gRPC error during sending logs for device {uuid}.", deviceUuid);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during sending logs for device {uuid}.", deviceUuid);
+                throw;
+            }
         }
     }
 }

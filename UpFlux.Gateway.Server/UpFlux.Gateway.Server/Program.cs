@@ -72,10 +72,14 @@ namespace UpFlux.Gateway.Server
 
                         services.AddSingleton<DeviceCommunicationService>();
                         services.AddSingleton<DeviceRepository>();
+                        services.AddSingleton<VersionRepository>();
                         services.AddSingleton<LicenseValidationService>();
                         services.AddSingleton<DataAggregationService>();
                         services.AddSingleton<CloudCommunicationService>();
                         services.AddSingleton<UpdateManagementService>();
+                        services.AddSingleton<LogCollectionService>();
+                        services.AddSingleton<CommandExecutionService>();
+                        services.AddSingleton<VersionControlService>();
                     })
                     .Build();
 

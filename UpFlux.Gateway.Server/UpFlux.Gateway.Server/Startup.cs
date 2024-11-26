@@ -39,6 +39,7 @@ namespace UpFlux.Gateway.Server
                 endpoints.MapGrpcService<UpdateServiceGrpc>();
                 endpoints.MapGrpcService<CommandServiceGrpc>();
                 endpoints.MapGrpcService<VersionDataServiceGrpc>();
+                endpoints.MapGrpcService<LogRequestServiceGrpc>();
                 // Map gRPC services here 
             });
         }

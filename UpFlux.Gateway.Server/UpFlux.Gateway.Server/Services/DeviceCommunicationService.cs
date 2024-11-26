@@ -580,19 +580,19 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Requests the current software version from a device.
+        /// Requests software versions from a device.
         /// </summary>
         /// <param name="device">The device to query.</param>
         /// <returns>A task representing the asynchronous operation, returning the VersionInfo.</returns>
-        public async Task<VersionInfo> RequestVersionInfoAsync(Device device)
+        public async Task<List<VersionInfo>> RequestVersionInfoAsync(Device device)
         {
             try
             {
-                using var client = new TcpClient();
+                using TcpClient client = new TcpClient();
                 await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
 
-                using var networkStream = client.GetStream();
-                using var sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
 
                 // Authenticate as server
                 await sslStream.AuthenticateAsServerAsync(
@@ -604,15 +604,15 @@ namespace UpFlux.Gateway.Server.Services
                 _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
 
                 // Send version request command
-                var commandMessage = "GET_VERSION\n";
-                var commandBytes = Encoding.UTF8.GetBytes(commandMessage);
+                string commandMessage = "GET_VERSIONS\n";
+                byte[] commandBytes = Encoding.UTF8.GetBytes(commandMessage);
                 await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
                 await sslStream.FlushAsync();
 
                 // Wait for device response
-                var buffer = new byte[1024];
+                byte[] buffer = new byte[8192]; // Increase buffer size if needed
                 int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
-                var responseMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
+                string responseMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
 
                 if (string.IsNullOrWhiteSpace(responseMessage))
                 {
@@ -620,19 +620,114 @@ namespace UpFlux.Gateway.Server.Services
                     return null;
                 }
 
-                // Create VersionInfo object
-                var versionInfo = new VersionInfo
+                // Deserialize the JSON string into a list of versions
+                List<string> versions = JsonConvert.DeserializeObject<List<string>>(responseMessage);
+
+                if (versions == null || versions.Count == 0)
+                {
+                    _logger.LogWarning("Device {uuid} returned no versions.", device.UUID);
+                    return null;
+                }
+
+                // Create a list of VersionInfo objects
+                List<VersionInfo> versionInfoList = versions.Select(version => new VersionInfo
                 {
                     DeviceUUID = device.UUID,
-                    Version = responseMessage,
-                    RetrievedAt = DateTime.UtcNow
-                };
+                    Version = version,
+                    InstalledAt = DateTime.UtcNow // Or retrieve actual installation time if available
+                }).ToList();
 
-                return versionInfo;
+                return versionInfoList;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to retrieve version information from device UUID: {uuid}", device.UUID);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Requests logs from a device.
+        /// </summary>
+        /// <param name="deviceUuid">The UUID of the device.</param>
+        /// <returns>A task representing the asynchronous operation, returning the path to the received log file.</returns>
+        public async Task<string> RequestLogsAsync(string deviceUuid)
+        {
+            Device device = _deviceRepository.GetDeviceByUuid(deviceUuid);
+            if (device == null)
+            {
+                _logger.LogWarning("Device with UUID '{uuid}' not found.", deviceUuid);
+                return null;
+            }
+
+            try
+            {
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
+
+                // Authenticate as server
+                await sslStream.AuthenticateAsServerAsync(
+                    _serverCertificate,
+                    clientCertificateRequired: true,
+                    enabledSslProtocols: System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
+
+                // Send log request command
+                string commandMessage = "GET_LOGS\n";
+                byte[] commandBytes = System.Text.Encoding.UTF8.GetBytes(commandMessage);
+                await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Wait for device response
+                // First, read the length of the incoming log data (as 4-byte integer)
+                byte[] lengthBytes = new byte[4];
+                int totalBytesRead = 0;
+                while (totalBytesRead < 4)
+                {
+                    int bytesRead = await sslStream.ReadAsync(lengthBytes, totalBytesRead, 4 - totalBytesRead);
+                    if (bytesRead == 0)
+                    {
+                        throw new Exception("Device closed the connection unexpectedly.");
+                    }
+                    totalBytesRead += bytesRead;
+                }
+
+                int logDataLength = BitConverter.ToInt32(lengthBytes, 0);
+
+                _logger.LogInformation("Receiving {length} bytes of log data from device {uuid}.", logDataLength, deviceUuid);
+
+                // Read the log data
+                byte[] logData = new byte[logDataLength];
+                totalBytesRead = 0;
+                while (totalBytesRead < logDataLength)
+                {
+                    int bytesRead = await sslStream.ReadAsync(logData, totalBytesRead, logDataLength - totalBytesRead);
+                    if (bytesRead == 0)
+                    {
+                        throw new Exception("Device closed the connection unexpectedly.");
+                    }
+                    totalBytesRead += bytesRead;
+                }
+
+                // Save the log data to a file
+                string logsDirectory = Path.Combine(_settings.LogsDirectory, "DeviceLogs");
+                Directory.CreateDirectory(logsDirectory);
+                string logFilePath = Path.Combine(logsDirectory, $"{deviceUuid}_{DateTime.UtcNow:yyyyMMddHHmmss}.zip");
+
+                await File.WriteAllBytesAsync(logFilePath, logData);
+
+                _logger.LogInformation("Logs received from device {uuid} and saved to {path}.", deviceUuid, logFilePath);
+
+                return logFilePath;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to retrieve logs from device UUID: {uuid}", deviceUuid);
                 return null;
             }
         }
