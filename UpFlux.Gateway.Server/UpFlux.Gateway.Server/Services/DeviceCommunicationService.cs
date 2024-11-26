@@ -515,5 +515,67 @@ namespace UpFlux.Gateway.Server.Services
                 return false;
             }
         }
+
+        /// <summary>
+        /// Sends a rollback command to a device.
+        /// </summary>
+        /// <param name="deviceUuid">The UUID of the device.</param>
+        /// <param name="parameters">Parameters for the rollback command (e.g., version to rollback to).</param>
+        /// <returns>A task representing the asynchronous operation, returning true if successful.</returns>
+        public async Task<bool> SendRollbackCommandAsync(string deviceUuid, string parameters)
+        {
+            Device device = _deviceRepository.GetDeviceByUuid(deviceUuid);
+            if (device == null)
+            {
+                _logger.LogWarning("Device with UUID '{uuid}' not found.", deviceUuid);
+                return false;
+            }
+
+            try
+            {
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
+
+                // Authenticate as server
+                await sslStream.AuthenticateAsServerAsync(
+                    _serverCertificate,
+                    clientCertificateRequired: true,
+                    enabledSslProtocols: System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
+
+                // Send rollback command
+                string commandMessage = $"ROLLBACK:{parameters}\n";
+                byte[] commandBytes = System.Text.Encoding.UTF8.GetBytes(commandMessage);
+                await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Wait for device acknowledgment
+                byte[] buffer = new byte[1024];
+                int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                string responseMessage = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
+
+                if (responseMessage != "ROLLBACK_INITIATED")
+                {
+                    _logger.LogWarning("Device {uuid} did not acknowledge rollback command.", deviceUuid);
+                    return false;
+                }
+
+                _logger.LogInformation("Rollback command acknowledged by device {uuid}", deviceUuid);
+
+                // To Implement that will confirm that roll back has been completed
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send rollback command to device UUID: {uuid}", deviceUuid);
+                return false;
+            }
+        }
     }
 }
