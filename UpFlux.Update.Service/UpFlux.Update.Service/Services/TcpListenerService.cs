@@ -1,8 +1,9 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -17,11 +18,19 @@ namespace UpFlux.Update.Service.Services
         private readonly Configuration _config;
         private TcpListener _tcpListener;
         private bool _isListening;
+        private readonly X509Certificate2 _clientCertificate;
+        private readonly X509Certificate2 _trustedCaCertificate;
 
         public TcpListenerService(ILogger<TcpListenerService> logger, IOptions<Configuration> configOptions)
         {
             _logger = logger;
             _config = configOptions.Value;
+
+            // Load client certificate
+            _clientCertificate = new X509Certificate2(_config.CertificatePath, _config.CertificatePassword);
+
+            // Load trusted CA certificate
+            _trustedCaCertificate = new X509Certificate2(_config.TrustedCaCertificatePath);
 
             // Ensure the incoming directory exists
             Directory.CreateDirectory(_config.IncomingPackageDirectory);
@@ -58,44 +67,31 @@ namespace UpFlux.Update.Service.Services
             {
                 using NetworkStream networkStream = client.GetStream();
 
-                // Read the length of the filename (4 bytes)
-                byte[] fileNameLengthBytes = new byte[4];
-                int bytesRead = await ReadExactAsync(networkStream, fileNameLengthBytes, 0, 4);
-                if (bytesRead < 4)
-                {
-                    _logger.LogError("Failed to read the length of the filename.");
-                    return;
-                }
-                int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
+                using SslStream sslStream = new SslStream(
+                    networkStream,
+                    false,
+                    new RemoteCertificateValidationCallback(ValidateServerCertificate),
+                    new LocalCertificateSelectionCallback(SelectLocalCertificate));
 
-                // Read the filename
-                byte[] fileNameBytes = new byte[fileNameLength];
-                bytesRead = await ReadExactAsync(networkStream, fileNameBytes, 0, fileNameLength);
-                if (bytesRead < fileNameLength)
-                {
-                    _logger.LogError("Failed to read the filename.");
-                    return;
-                }
-                string fileName = Encoding.UTF8.GetString(fileNameBytes);
+                // Authenticate as client
+                await sslStream.AuthenticateAsClientAsync(
+                    _config.GatewayServerIp,
+                    new X509CertificateCollection { _clientCertificate },
+                    System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
 
-                // Validate the filename to prevent security issues
-                if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-                {
-                    _logger.LogError("Invalid filename received.");
-                    return;
-                }
+                _logger.LogInformation("Secure connection established with the Gateway Server.");
 
-                // Generate the destination path in the IncomingPackageDirectory
-                string destinationPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+                // Send Device UUID to the Gateway Server
+                string uuidMessage = $"{_config.DeviceUuid}\n";
+                byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+                await sslStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                await sslStream.FlushAsync();
 
-                // Read the file contents and save to destinationPath
-                using FileStream fileStream = File.Create(destinationPath);
-                await networkStream.CopyToAsync(fileStream);
-                await fileStream.FlushAsync();
+                _logger.LogInformation("Device UUID sent to Gateway Server: {uuid}", _config.DeviceUuid);
 
-                _logger.LogInformation($"Received package and saved to {destinationPath}");
-
-                // The FileWatcherService will detect the new file and handle it
+                // Receive commands from the Gateway Server
+                await ReceiveCommandsAsync(sslStream);
             }
             catch (Exception ex)
             {
@@ -107,21 +103,188 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        // Helper method to read an exact number of bytes from the stream
-        private async Task<int> ReadExactAsync(NetworkStream stream, byte[] buffer, int offset, int count)
+        private async Task ReceiveCommandsAsync(SslStream sslStream)
         {
-            int totalBytesRead = 0;
-            while (totalBytesRead < count)
+            try
             {
-                int bytesRead = await stream.ReadAsync(buffer, offset + totalBytesRead, count - totalBytesRead);
+                while (true)
+                {
+                    string command = await ReadMessageAsync(sslStream);
+                    if (string.IsNullOrEmpty(command))
+                    {
+                        _logger.LogInformation("No command received. Closing connection.");
+                        break;
+                    }
+
+                    _logger.LogInformation("Received command: {command}", command);
+
+                    if (command.StartsWith("SEND_PACKAGE"))
+                    {
+                        // Handle recieving the package
+                        await ReceivePackageAsync(sslStream, command);
+                    }
+                    else if (command.StartsWith("LICENSE"))
+                    {
+                        // Handle the license
+                        string license = command.Substring("LICENSE:".Length).Trim();
+                        StoreLicense(license);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Unknown command received: {command}", command);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error receiving commands from Gateway Server.");
+            }
+        }
+
+        private async Task ReceivePackageAsync(SslStream sslStream, string command)
+        {
+            try
+            {
+                // Expected format that was configured in the gateway server --  SEND_PACKAGE:<filename>
+                string[] parts = command.Split(':');
+                if (parts.Length != 2)
+                {
+                    _logger.LogWarning("Invalid SEND_PACKAGE command format.");
+                    return;
+                }
+
+                string fileName = parts[1];
+
+                // Validate the filename to prevent security issues
+                if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                {
+                    _logger.LogError("Invalid filename received.");
+                    return;
+                }
+
+                // Generate the destination path in the IncomingPackageDirectory
+                string destinationPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+
+                // Send acknowledgment to start receiving the package
+                string ackMessage = "READY_FOR_PACKAGE\n";
+                byte[] ackBytes = Encoding.UTF8.GetBytes(ackMessage);
+                await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Read the length of the package (as 4-byte integer)
+                byte[] lengthBytes = new byte[4];
+                int totalBytesRead = 0;
+                while (totalBytesRead < 4)
+                {
+                    int bytesRead = await sslStream.ReadAsync(lengthBytes, totalBytesRead, 4 - totalBytesRead);
+                    if (bytesRead == 0)
+                    {
+                        throw new Exception("Gateway Server closed the connection unexpectedly.");
+                    }
+                    totalBytesRead += bytesRead;
+                }
+
+                int packageLength = BitConverter.ToInt32(lengthBytes, 0);
+
+                _logger.LogInformation("Receiving package '{fileName}' of length {length} bytes.", fileName, packageLength);
+
+                // Read the package data
+                byte[] packageData = new byte[packageLength];
+                totalBytesRead = 0;
+                while (totalBytesRead < packageLength)
+                {
+                    int bytesRead = await sslStream.ReadAsync(packageData, totalBytesRead, packageLength - totalBytesRead);
+                    if (bytesRead == 0)
+                    {
+                        throw new Exception("Gateway Server closed the connection unexpectedly.");
+                    }
+                    totalBytesRead += bytesRead;
+                }
+
+                // Save the package data to a file
+                await File.WriteAllBytesAsync(destinationPath, packageData);
+
+                _logger.LogInformation("Package '{fileName}' received and saved to '{path}'.", fileName, destinationPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error receiving package from Gateway Server.");
+            }
+        }
+
+        // Helper method to read a message terminated by a newline character
+        private async Task<string> ReadMessageAsync(SslStream sslStream)
+        {
+            StringBuilder messageData = new StringBuilder();
+            byte[] buffer = new byte[1024];
+            int bytesRead = -1;
+
+            do
+            {
+                bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
                 if (bytesRead == 0)
                 {
-                    // End of stream reached before reading the required number of bytes
                     break;
                 }
-                totalBytesRead += bytesRead;
+
+                string chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                messageData.Append(chunk);
+
+                if (chunk.Contains("\n"))
+                {
+                    break;
+                }
+            } while (bytesRead != 0);
+
+            return messageData.ToString().Trim();
+        }
+
+        private void StoreLicense(string license)
+        {
+            try
+            {
+                string licensePath = _config.LicenseFilePath;
+
+                // Ensure the directory exists
+                string directory = Path.GetDirectoryName(licensePath);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                // Write the license to the file securely
+                File.WriteAllText(licensePath, license);
+
+                // Set appropriate permissions - at the moment I will set as a read-only file
+                FileInfo fileInfo = new FileInfo(licensePath);
+                fileInfo.Attributes = FileAttributes.ReadOnly;
+
+                _logger.LogInformation("License stored securely at {path}", licensePath);
             }
-            return totalBytesRead;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to store license.");
+            }
+        }
+
+        private bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            // Validate server certificate against trusted CA
+            if (sslPolicyErrors == SslPolicyErrors.None)
+                return true;
+
+            _logger.LogWarning("Server certificate validation failed: {errors}", sslPolicyErrors);
+            return false;
+        }
+
+        private X509Certificate SelectLocalCertificate(
+            object sender,
+            string targetHost,
+            X509CertificateCollection localCertificates,
+            X509Certificate remoteCertificate,
+            string[] acceptableIssuers)
+        {
+            return _clientCertificate;
         }
 
         public void StopListening()
