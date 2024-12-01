@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.IO;
 
 namespace UpFlux.Monitoring.Service
 {
@@ -50,45 +51,54 @@ namespace UpFlux.Monitoring.Service
             {
                 try
                 {
-                    _logger.LogInformation("Collecting system metrics...");
-
-                    // Collect system metrics
-                    var metrics = _metricsCollector.CollectAllMetrics();
-
-                    // Get the latest sensor data
-                    string sensorData = _pythonScriptService.GetLatestSensorData();
-
-                    SensorData sensorValues = null;
-                    if (!string.IsNullOrEmpty(sensorData))
+                    // Check if license is valid
+                    if (IsLicenseValid())
                     {
-                        try
+                        _logger.LogInformation("License is valid. Proceeding to collect and send data.");
+
+                        // Collect system metrics
+                        var metrics = _metricsCollector.CollectAllMetrics();
+
+                        // Get the latest sensor data
+                        string sensorData = _pythonScriptService.GetLatestSensorData();
+
+                        SensorData sensorValues = null;
+                        if (!string.IsNullOrEmpty(sensorData))
                         {
-                            sensorValues = JsonSerializer.Deserialize<SensorData>(sensorData);
+                            try
+                            {
+                                sensorValues = JsonSerializer.Deserialize<SensorData>(sensorData);
+                            }
+                            catch (JsonException ex)
+                            {
+                                _logger.LogError(ex, "Failed to deserialize sensor data.");
+                            }
                         }
-                        catch (JsonException ex)
+                        else
                         {
-                            _logger.LogError(ex, "Failed to deserialize sensor data.");
+                            _logger.LogWarning("No sensor data received.");
                         }
+
+                        // Combine the data into one JSON object
+                        var combinedData = new
+                        {
+                            Metrics = metrics,
+                            SensorData = sensorValues
+                        };
+                        string jsonData = JsonSerializer.Serialize(combinedData);
+
+                        // Send the data via TCP
+                        _tcpClientService.SendData(jsonData);
+
+                        _logger.LogInformation("Data sent successfully at: {time}", DateTimeOffset.Now);
                     }
                     else
                     {
-                        _logger.LogWarning("No sensor data received.");
+                        _logger.LogWarning("License is invalid or expired. Attempting to renew.");
+
+                        // Attempt to renew license
+                        _tcpClientService.SendLicenseRenewalRequest();
                     }
-
-                    // Combine the data into one JSON object
-                    var combinedData = new
-                    {
-                        Metrics = metrics,
-                        SensorData = sensorValues
-                    };
-                    string jsonData = JsonSerializer.Serialize(combinedData);
-
-                    // Send the data via TCP
-                    _tcpClientService.SendData(jsonData);
-
-                    _logger.LogInformation("Data: {data}", jsonData);
-
-                    _logger.LogInformation("Data sent successfully at: {time}", DateTimeOffset.Now);
                 }
                 catch (Exception ex)
                 {
@@ -104,6 +114,52 @@ namespace UpFlux.Monitoring.Service
 
             _logger.LogInformation("Worker service stopping...");
         }
+
+        /// <summary>
+        /// Checks if the license is valid and not expired.
+        /// </summary>
+        private bool IsLicenseValid()
+        {
+            try
+            {
+                string licensePath = _settings.LicenseFilePath;
+
+                if (File.Exists(licensePath))
+                {
+                    string licenseContent = File.ReadAllText(licensePath);
+
+                    // Deserialize the license data
+                    LicenseData licenseData = JsonSerializer.Deserialize<LicenseData>(licenseContent);
+
+                    if (licenseData != null)
+                    {
+                        if (licenseData.ExpirationDate > DateTime.UtcNow)
+                        {
+                            return true;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("License has expired.");
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("License data is invalid.");
+                        return false;
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("License file not found at {path}.", licensePath);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking license validity.");
+                return false;
+            }
+        }
     }
 }
-
