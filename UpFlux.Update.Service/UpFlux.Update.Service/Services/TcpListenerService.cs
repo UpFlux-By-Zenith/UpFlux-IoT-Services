@@ -70,8 +70,8 @@ namespace UpFlux.Update.Service.Services
                 using SslStream sslStream = new SslStream(
                     networkStream,
                     false,
-                    new RemoteCertificateValidationCallback(ValidateServerCertificate),
-                    new LocalCertificateSelectionCallback(SelectLocalCertificate));
+                    ValidateServerCertificate,
+                    SelectLocalCertificate);
 
                 // Authenticate as client
                 await sslStream.AuthenticateAsClientAsync(
@@ -120,7 +120,7 @@ namespace UpFlux.Update.Service.Services
 
                     if (command.StartsWith("SEND_PACKAGE"))
                     {
-                        // Handle recieving the package
+                        // Handle receiving the package
                         await ReceivePackageAsync(sslStream, command);
                     }
                     else if (command.StartsWith("LICENSE"))
@@ -128,6 +128,11 @@ namespace UpFlux.Update.Service.Services
                         // Handle the license
                         string license = command.Substring("LICENSE:".Length).Trim();
                         StoreLicense(license);
+                    }
+                    else if (command == "REQUEST_LOGS")
+                    {
+                        // Send logs to the Gateway Server
+                        await SendLogsAsync(sslStream);
                     }
                     else
                     {
@@ -145,7 +150,7 @@ namespace UpFlux.Update.Service.Services
         {
             try
             {
-                // Expected format that was configured in the gateway server --  SEND_PACKAGE:<filename>
+                // Expected format: SEND_PACKAGE:<filename>
                 string[] parts = command.Split(':');
                 if (parts.Length != 2)
                 {
@@ -155,17 +160,17 @@ namespace UpFlux.Update.Service.Services
 
                 string fileName = parts[1];
 
-                // Validate the filename to prevent security issues
+                // Validate the filename
                 if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                 {
                     _logger.LogError("Invalid filename received.");
                     return;
                 }
 
-                // Generate the destination path in the IncomingPackageDirectory
+                // Generate the destination path
                 string destinationPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
 
-                // Send acknowledgment to start receiving the package
+                // Send acknowledgment
                 string ackMessage = "READY_FOR_PACKAGE\n";
                 byte[] ackBytes = Encoding.UTF8.GetBytes(ackMessage);
                 await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
@@ -255,7 +260,7 @@ namespace UpFlux.Update.Service.Services
                 // Write the license to the file securely
                 File.WriteAllText(licensePath, license);
 
-                // Set appropriate permissions - at the moment I will set as a read-only file
+                // Set appropriate permissions
                 FileInfo fileInfo = new FileInfo(licensePath);
                 fileInfo.Attributes = FileAttributes.ReadOnly;
 
@@ -267,7 +272,11 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        private bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        private bool ValidateServerCertificate(
+            object sender,
+            X509Certificate certificate,
+            X509Chain chain,
+            SslPolicyErrors sslPolicyErrors)
         {
             // Validate server certificate against trusted CA
             if (sslPolicyErrors == SslPolicyErrors.None)
@@ -291,6 +300,121 @@ namespace UpFlux.Update.Service.Services
         {
             _isListening = false;
             _tcpListener.Stop();
+        }
+
+        /// <summary>
+        /// Method to send logs to the Gateway Server over the secure connection.
+        /// </summary>
+        /// <param name="sslStream">The SSL stream to send logs over.</param>
+        /// <returns> Returns a Task representing the asynchronous operation.</returns>
+        private async Task SendLogsAsync(SslStream sslStream)
+        {
+            try
+            {
+                string updateServiceLogPath = _config.UpdateServiceLog;
+                string monitoringServiceLogPath = _config.MonitoringServiceLog;
+
+                if (!File.Exists(updateServiceLogPath) && !File.Exists(monitoringServiceLogPath))
+                {
+                    _logger.LogWarning("No log files found to send.");
+                    return;
+                }
+
+                // Prepare a list of logs to send
+                var logsToSend = new List<(string FileName, string FilePath)>();
+
+                if (File.Exists(updateServiceLogPath))
+                {
+                    logsToSend.Add(("UpdateServiceLog.log", updateServiceLogPath));
+                }
+
+                if (File.Exists(monitoringServiceLogPath))
+                {
+                    logsToSend.Add(("MonitoringServiceLog.log", monitoringServiceLogPath));
+                }
+
+                // Send the number of log files
+                byte[] fileCountBytes = BitConverter.GetBytes(logsToSend.Count);
+                await sslStream.WriteAsync(fileCountBytes, 0, fileCountBytes.Length);
+                await sslStream.FlushAsync();
+
+                foreach (var log in logsToSend)
+                {
+                    // Send the file name length and file name
+                    byte[] fileNameBytes = Encoding.UTF8.GetBytes(log.FileName);
+                    byte[] fileNameLengthBytes = BitConverter.GetBytes(fileNameBytes.Length);
+                    await sslStream.WriteAsync(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
+                    await sslStream.WriteAsync(fileNameBytes, 0, fileNameBytes.Length);
+                    await sslStream.FlushAsync();
+
+                    // Read the file data
+                    byte[] logBytes = File.ReadAllBytes(log.FilePath);
+                    int logLength = logBytes.Length;
+
+                    // Send the length of the log file (as 4-byte integer)
+                    byte[] lengthBytes = BitConverter.GetBytes(logLength);
+                    await sslStream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+                    await sslStream.FlushAsync();
+
+                    // Send the log file data
+                    await sslStream.WriteAsync(logBytes, 0, logBytes.Length);
+                    await sslStream.FlushAsync();
+                }
+
+                _logger.LogInformation("Logs sent to Gateway Server successfully.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send logs to Gateway Server.");
+            }
+        }
+
+        /// <summary>
+        /// This method sends a notification message to the Gateway Server.
+        /// </summary>
+        /// <param name="message">The notification message to send.</param>
+        /// <returns>Returns a Task representing the asynchronous operation.</returns>
+        public async Task SendNotificationAsync(string message)
+        {
+            try
+            {
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(_config.GatewayServerIp, _config.GatewayServerPort);
+
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(
+                    networkStream,
+                    false,
+                    ValidateServerCertificate,
+                    SelectLocalCertificate);
+
+                // Authenticate as client
+                await sslStream.AuthenticateAsClientAsync(
+                    _config.GatewayServerIp,
+                    new X509CertificateCollection { _clientCertificate },
+                    System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("Secure connection established with the Gateway Server for notification.");
+
+                // Send Device UUID to the Gateway Server
+                string uuidMessage = $"{_config.DeviceUuid}\n";
+                byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+                await sslStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Send the notification message
+                string notificationMessage = $"NOTIFICATION:{message}\n";
+                byte[] messageBytes = Encoding.UTF8.GetBytes(notificationMessage);
+                await sslStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                await sslStream.FlushAsync();
+
+                _logger.LogInformation("Notification sent to Gateway Server: {message}", message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send notification to Gateway Server.");
+            }
         }
     }
 }

@@ -76,6 +76,11 @@ namespace UpFlux.Gateway.Server.Models
         /// </summary>
         [Required]
         public string LogsDirectory { get; set; }
+
+        /// <summary>
+        /// Gets or sets the directory path for storing update packages.
+        /// </summary>
+        public string UpdatePackageDirectory { get; set; }
     }
 }
 

@@ -42,66 +42,89 @@ namespace UpFlux.Monitoring.Service
         /// <summary>
         /// Sends data to the server over a secure connection using mTLS.
         /// </summary>
-        public void SendData(string data)
+        public async Task SendDataAsync(string data)
         {
             try
             {
-                _logger.LogInformation("Connecting to server {ServerIp}:{ServerPort}", _serverIp, _serverPort);
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(_settings.ServerIp, _settings.ServerPort);
 
-                using (TcpClient client = new TcpClient())
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(
+                    networkStream,
+                    false,
+                    ValidateServerCertificate,
+                    SelectLocalCertificate);
+
+                // Authenticate as client
+                await sslStream.AuthenticateAsClientAsync(
+                    _settings.ServerIp,
+                    new X509CertificateCollection { _clientCertificate },
+                    System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("Secure connection established with the Gateway Server.");
+
+                // Send Device UUID to the Gateway Server
+                string uuidMessage = $"{_settings.DeviceUuid}\n";
+                byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+                await sslStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Send monitoring data
+                string message = $"MONITORING_DATA:{data}\n";
+                byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+                await sslStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                await sslStream.FlushAsync();
+
+                _logger.LogInformation("Monitoring data sent to Gateway Server.");
+
+                // Read acknowledgment
+                string response = await ReadMessageAsync(sslStream);
+                if (response == "DATA_RECEIVED")
                 {
-                    client.Connect(_serverIp, _serverPort);
-
-                    using (NetworkStream networkStream = client.GetStream())
-                    {
-                        using (SslStream sslStream = new SslStream(
-                            networkStream,
-                            false,
-                            new RemoteCertificateValidationCallback(ValidateServerCertificate),
-                            new LocalCertificateSelectionCallback(SelectLocalCertificate)))
-                        {
-                            // Authenticate as client
-                            sslStream.AuthenticateAsClient(_serverIp, new X509CertificateCollection { _clientCertificate }, System.Security.Authentication.SslProtocols.Tls13, false);
-
-                            _logger.LogInformation("Secure connection established with the server.");
-
-                            // Send Device UUID
-                            string uuid = _settings.DeviceUuid;
-                            string uuidMessage = $"{uuid}\n";
-                            byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
-                            sslStream.Write(uuidBytes, 0, uuidBytes.Length);
-                            sslStream.Flush();
-
-                            _logger.LogInformation("Device UUID sent to server: {uuid}", uuid);
-
-                            // Receive License from Server
-                            string license = ReadMessage(sslStream);
-                            if (!string.IsNullOrEmpty(license))
-                            {
-                                _logger.LogInformation("License received from server.");
-
-                                // Store license securely
-                                StoreLicense(license);
-                            }
-                            else
-                            {
-                                _logger.LogWarning("No license received from server.");
-                            }
-
-                            // Send Data
-                            byte[] dataBytes = Encoding.UTF8.GetBytes(data);
-                            sslStream.Write(dataBytes, 0, dataBytes.Length);
-                            sslStream.Flush();
-
-                            _logger.LogInformation("Data sent to server {ServerIp}:{ServerPort}", _serverIp, _serverPort);
-                        }
-                    }
+                    _logger.LogInformation("Gateway Server acknowledged data reception.");
+                }
+                else
+                {
+                    _logger.LogWarning("Unexpected response from Gateway Server: {response}", response);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during secure communication with the server.");
+                _logger.LogError(ex, "Failed to send monitoring data to Gateway Server.");
             }
+        }
+
+        /// <summary>
+        /// Helper method to read a message from the SSL stream asynchronously.
+        /// </summary>
+        /// <param name="sslStream">SSL stream to read from</param>
+        /// <returns>Returns the message read from the stream</returns>
+        private async Task<string> ReadMessageAsync(SslStream sslStream)
+        {
+            StringBuilder messageData = new StringBuilder();
+            byte[] buffer = new byte[1024];
+            int bytesRead = -1;
+
+            do
+            {
+                bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+
+                string chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                messageData.Append(chunk);
+
+                if (chunk.Contains("\n"))
+                {
+                    break;
+                }
+            } while (bytesRead != 0);
+
+            return messageData.ToString().Trim();
         }
 
         /// <summary>

@@ -26,6 +26,7 @@ namespace UpFlux.Gateway.Server.Services
         private readonly X509Certificate2 _trustedCaCertificate;
 
         private readonly DataAggregationService _dataAggregationService;
+        private readonly AlertingService _alertingService;
 
         private TcpListener _listener;
 
@@ -41,7 +42,8 @@ namespace UpFlux.Gateway.Server.Services
             IOptions<GatewaySettings> settings,
             LicenseValidationService licenseValidationService,
             DeviceRepository deviceRepository,
-            DataAggregationService dataAggregationService)
+            DataAggregationService dataAggregationService,
+            AlertingService alertingService)
         {
             _logger = logger;
             _settings = settings.Value;
@@ -296,40 +298,102 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
+        /// Requests the UUID from the connected device.
+        /// </summary>
+        private async Task<string> RequestDeviceUuidAsync(SslStream sslStream)
+        {
+            // Send request for UUID
+            string requestMessage = "REQUEST_UUID\n";
+            byte[] requestBytes = Encoding.UTF8.GetBytes(requestMessage);
+            await sslStream.WriteAsync(requestBytes, 0, requestBytes.Length);
+            await sslStream.FlushAsync();
+
+            // Read response
+            string responseMessage = await ReadMessageAsync(sslStream);
+
+            return responseMessage;
+        }
+
+        /// <summary>
+        /// Reads a message from the SSL stream terminated by a newline character.
+        /// </summary>
+        private async Task<string> ReadMessageAsync(SslStream sslStream)
+        {
+            StringBuilder messageData = new StringBuilder();
+            byte[] buffer = new byte[1024];
+            int bytesRead = -1;
+
+            do
+            {
+                bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+
+                string chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                messageData.Append(chunk);
+
+                if (chunk.Contains("\n"))
+                {
+                    break;
+                }
+            } while (bytesRead != 0);
+
+            return messageData.ToString().Trim();
+        }
+
+        /// <summary>
         /// Handles secure data exchange with the device after license validation.
         /// </summary>
-        /// <param name="sslStream">The SSL stream for communication.</param>
-        /// <param name="device">The device object.</param>
-        /// <returns>A task representing the communication operation.</returns>
         private async Task ProceedWithSecureDataExchangeAsync(SslStream sslStream, Device device)
         {
             try
             {
-                // Receive monitoring data from the device
+                // Receive commands or data from the device
                 while (true)
                 {
-                    // Read data from the device
-                    byte[] buffer = new byte[4096];
-                    int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
-
-                    if (bytesRead == 0)
+                    string message = await ReadMessageAsync(sslStream);
+                    if (string.IsNullOrEmpty(message))
                     {
-                        // The device has closed the connection
-                        _logger.LogInformation("Device UUID: {uuid} has closed the connection.", device.UUID);
+                        _logger.LogInformation("Device UUID: {uuid} closed the connection.", device.UUID);
                         break;
                     }
 
-                    string receivedData = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-                    _logger.LogInformation("Received data from device UUID: {uuid}: {data}", device.UUID, receivedData);
+                    _logger.LogInformation("Received message from device UUID: {uuid}: {message}", device.UUID, message);
 
-                    // Process the received data
-                    await ProcessDeviceDataAsync(device, receivedData);
+                    if (message.StartsWith("MONITORING_DATA:"))
+                    {
+                        // Process monitoring data
+                        string data = message.Substring("MONITORING_DATA:".Length);
+                        await ProcessDeviceDataAsync(device, data);
 
-                    //send a response or acknowledgment
-                    string acknowledgment = "DATA_RECEIVED\n";
-                    byte[] ackBytes = System.Text.Encoding.UTF8.GetBytes(acknowledgment);
-                    await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
-                    await sslStream.FlushAsync();
+                        // Send acknowledgment
+                        string acknowledgment = "DATA_RECEIVED\n";
+                        byte[] ackBytes = Encoding.UTF8.GetBytes(acknowledgment);
+                        await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
+                        await sslStream.FlushAsync();
+                    }
+                    else if (message == "READY_FOR_LICENSE")
+                    {
+                        // Send license to the device
+                        await SendLicenseAsync(device.UUID, device.License, sslStream);
+                    }
+                    else if (message == "REQUEST_UPDATE")
+                    {
+                        // Handle update request
+                        await SendUpdatePackageAsync(device.UUID, sslStream);
+                    }
+                    else if (message.StartsWith("NOTIFICATION:"))
+                    {
+                        // Handle notifications from the device
+                        string notification = message.Substring("NOTIFICATION:".Length);
+                        await HandleDeviceNotificationAsync(device, notification);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Unknown message received from device UUID: {uuid}", device.UUID);
+                    }
                 }
             }
             catch (Exception ex)
@@ -339,17 +403,37 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
+        /// Method to handle notifications received from the device.
+        /// </summary>
+        /// <param name="device">The device that sent the notification.</param>
+        /// <param name="notification">String containing the notification message.</param>
+        /// <returns>Returns a task representing the asynchronous operation.</returns>
+        private async Task HandleDeviceNotificationAsync(Device device, string notification)
+        {
+            _logger.LogInformation("Received notification from device UUID: {uuid}: {notification}", device.UUID, notification);
+
+            // Create an Alert object
+            Alert alert = new Alert
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                Level = "Information",
+                Message = notification,
+                Source = $"Device-{device.UUID}"
+            };
+
+            // Process the log event using AlertingService
+            await _alertingService.ProcessDeviceLogAsync(alert);
+        }
+
+        /// <summary>
         /// Processes data received from the device.
         /// </summary>
-        /// <param name="device">The device object.</param>
-        /// <param name="data">The data received from the device.</param>
-        /// <returns>A task representing the processing operation.</returns>
         private async Task ProcessDeviceDataAsync(Device device, string data)
         {
             try
             {
                 // Deserialize the JSON data into MonitoringData object
-                MonitoringData? monitoringData = JsonConvert.DeserializeObject<MonitoringData>(data);
+                MonitoringData monitoringData = JsonConvert.DeserializeObject<MonitoringData>(data);
 
                 // Validate the data
                 if (monitoringData == null || monitoringData.UUID != device.UUID)
@@ -376,61 +460,15 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Requests the UUID from the connected device.
+        /// Sends a license to the device over the existing SSL stream.
         /// </summary>
-        /// <param name="sslStream">The SSL stream for communication.</param>
-        /// <returns>A task representing the UUID retrieval operation.</returns>
-        private async Task<string> RequestDeviceUuidAsync(SslStream sslStream)
+        private async Task SendLicenseAsync(string uuid, string license, SslStream sslStream)
         {
-            // Send request for UUID
-            string requestMessage = "REQUEST_UUID\n";
-            byte[] requestBytes = System.Text.Encoding.UTF8.GetBytes(requestMessage);
-            await sslStream.WriteAsync(requestBytes, 0, requestBytes.Length);
-            await sslStream.FlushAsync();
-
-            // Read response
-            byte[] buffer = new byte[1024];
-            int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
-            string responseMessage = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-
-            return responseMessage;
-        }
-
-        /// <summary>
-        /// Sends a license to the device.
-        /// </summary>
-        /// <param name="uuid">The UUID of the device.</param>
-        /// <param name="license">The license to send.</param>
-        /// <returns>A task representing the send operation.</returns>
-        public async Task SendLicenseAsync(string uuid, string license)
-        {
-            Device device = _deviceRepository.GetDeviceByUuid(uuid);
-            if (device == null)
-            {
-                _logger.LogWarning("Cannot send license. Device with UUID '{uuid}' not found.", uuid);
-                return;
-            }
-
             try
             {
-                using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
-
-                using NetworkStream networkStream = client.GetStream();
-                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
-
-                // Authenticate as server
-                await sslStream.AuthenticateAsServerAsync(
-                    _serverCertificate,
-                    clientCertificateRequired: true,
-                    enabledSslProtocols: System.Security.Authentication.SslProtocols.Tls13,
-                    checkCertificateRevocation: false);
-
-                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
-
                 // Send license
                 string licenseMessage = $"LICENSE:{license}\n";
-                byte[] licenseBytes = System.Text.Encoding.UTF8.GetBytes(licenseMessage);
+                byte[] licenseBytes = Encoding.UTF8.GetBytes(licenseMessage);
                 await sslStream.WriteAsync(licenseBytes, 0, licenseBytes.Length);
                 await sslStream.FlushAsync();
 
@@ -443,78 +481,83 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Sends an update package to a device.
+        /// Sends an update package to a device over the existing SSL stream.
         /// </summary>
-        /// <param name="deviceUuid">The UUID of the device.</param>
-        /// <param name="packageFilePath">The file path of the update package.</param>
-        /// <returns>A task representing the asynchronous operation, returning true if successful.</returns>
-        public async Task<bool> SendUpdatePackageAsync(string deviceUuid, string packageFilePath)
+        private async Task SendUpdatePackageAsync(string deviceUuid, SslStream sslStream)
         {
             Device device = _deviceRepository.GetDeviceByUuid(deviceUuid);
             if (device == null)
             {
                 _logger.LogWarning("Device with UUID '{uuid}' not found.", deviceUuid);
-                return false;
+                return;
             }
 
             try
             {
-                using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+                // Send update package command with filename
+                string packageFilePath = GetLatestPackageFilePath();
+                if (string.IsNullOrEmpty(packageFilePath))
+                {
+                    _logger.LogWarning("No update package available to send.");
+                    return;
+                }
 
-                using NetworkStream networkStream = client.GetStream();
-                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
-
-                // Authenticate as server
-                await sslStream.AuthenticateAsServerAsync(
-                    _serverCertificate,
-                    clientCertificateRequired: true,
-                    enabledSslProtocols: System.Security.Authentication.SslProtocols.Tls13,
-                    checkCertificateRevocation: false);
-
-                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
-
-                // Send update package command
-                string commandMessage = "UPDATE_PACKAGE\n";
-                byte[] commandBytes = System.Text.Encoding.UTF8.GetBytes(commandMessage);
+                string fileName = Path.GetFileName(packageFilePath);
+                string commandMessage = $"SEND_PACKAGE:{fileName}\n";
+                byte[] commandBytes = Encoding.UTF8.GetBytes(commandMessage);
                 await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
                 await sslStream.FlushAsync();
 
                 // Wait for device acknowledgment
-                byte[] buffer = new byte[1024];
-                int bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
-                string responseMessage = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-
-                if (responseMessage != "READY_FOR_UPDATE")
+                string responseMessage = await ReadMessageAsync(sslStream);
+                if (responseMessage != "READY_FOR_PACKAGE")
                 {
-                    _logger.LogWarning("Device {uuid} is not ready for update.", deviceUuid);
-                    return false;
+                    _logger.LogWarning("Device {uuid} is not ready for package transfer.", deviceUuid);
+                    return;
                 }
 
-                // Send the update package file
-                byte[] fileBytes = File.ReadAllBytes(packageFilePath);
-                int fileLength = fileBytes.Length;
+                // Read the package data
+                byte[] packageBytes = File.ReadAllBytes(packageFilePath);
+                int packageLength = packageBytes.Length;
 
-                // Send the length of the file (as 4-byte integer)
-                byte[] fileLengthBytes = BitConverter.GetBytes(fileLength);
-                await sslStream.WriteAsync(fileLengthBytes, 0, fileLengthBytes.Length);
+                // Send the length of the package (as 4-byte integer)
+                byte[] lengthBytes = BitConverter.GetBytes(packageLength);
+                await sslStream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
                 await sslStream.FlushAsync();
 
-                // Send the file bytes
-                await sslStream.WriteAsync(fileBytes, 0, fileBytes.Length);
+                // Send the package data
+                await sslStream.WriteAsync(packageBytes, 0, packageBytes.Length);
                 await sslStream.FlushAsync();
 
-                _logger.LogInformation("Update package sent to device {uuid}", deviceUuid);
-
-                // Might implement a wait back message to confirm installation
-
-                return true;
+                _logger.LogInformation("Update package '{fileName}' sent to device {uuid}", fileName, deviceUuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send update package to device UUID: {uuid}", deviceUuid);
-                return false;
             }
+        }
+
+        /// <summary>
+        /// Gets the file path of the latest update package.
+        /// </summary>
+        private string GetLatestPackageFilePath()
+        {
+            string packageDirectory = _settings.UpdatePackageDirectory;
+            if (!Directory.Exists(packageDirectory))
+            {
+                _logger.LogWarning("Package directory does not exist: {path}", packageDirectory);
+                return null;
+            }
+
+            string[] packageFiles = Directory.GetFiles(packageDirectory, "*.deb");
+            if (packageFiles.Length == 0)
+            {
+                _logger.LogWarning("No package files found in directory: {path}", packageDirectory);
+                return null;
+            }
+
+            // Return the latest package based on creation time
+            return packageFiles.OrderByDescending(f => File.GetCreationTime(f)).FirstOrDefault();
         }
 
         /// <summary>
@@ -651,7 +694,7 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         /// <param name="deviceUuid">The UUID of the device.</param>
         /// <returns>A task representing the asynchronous operation, returning the path to the received log file.</returns>
-        public async Task<string> RequestLogsAsync(string deviceUuid)
+        public async Task<string[]> RequestLogsAsync(string deviceUuid)
         {
             Device device = _deviceRepository.GetDeviceByUuid(deviceUuid);
             if (device == null)
@@ -678,52 +721,82 @@ namespace UpFlux.Gateway.Server.Services
                 _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
 
                 // Send log request command
-                string commandMessage = "GET_LOGS\n";
-                byte[] commandBytes = System.Text.Encoding.UTF8.GetBytes(commandMessage);
+                string commandMessage = "REQUEST_LOGS\n";
+                byte[] commandBytes = Encoding.UTF8.GetBytes(commandMessage);
                 await sslStream.WriteAsync(commandBytes, 0, commandBytes.Length);
                 await sslStream.FlushAsync();
 
-                // Wait for device response
-                // First, read the length of the incoming log data (as 4-byte integer)
-                byte[] lengthBytes = new byte[4];
-                int totalBytesRead = 0;
-                while (totalBytesRead < 4)
+                // Receive the number of log files
+                byte[] fileCountBytes = new byte[4];
+                int bytesRead = await sslStream.ReadAsync(fileCountBytes, 0, 4);
+                if (bytesRead < 4)
                 {
-                    int bytesRead = await sslStream.ReadAsync(lengthBytes, totalBytesRead, 4 - totalBytesRead);
-                    if (bytesRead == 0)
-                    {
-                        throw new Exception("Device closed the connection unexpectedly.");
-                    }
-                    totalBytesRead += bytesRead;
+                    throw new Exception("Failed to read the number of log files.");
                 }
 
-                int logDataLength = BitConverter.ToInt32(lengthBytes, 0);
+                int fileCount = BitConverter.ToInt32(fileCountBytes, 0);
 
-                _logger.LogInformation("Receiving {length} bytes of log data from device {uuid}.", logDataLength, deviceUuid);
+                var receivedLogFiles = new List<string>();
 
-                // Read the log data
-                byte[] logData = new byte[logDataLength];
-                totalBytesRead = 0;
-                while (totalBytesRead < logDataLength)
+                for (int i = 0; i < fileCount; i++)
                 {
-                    int bytesRead = await sslStream.ReadAsync(logData, totalBytesRead, logDataLength - totalBytesRead);
-                    if (bytesRead == 0)
+                    // Read the file name length and file name
+                    byte[] fileNameLengthBytes = new byte[4];
+                    bytesRead = await sslStream.ReadAsync(fileNameLengthBytes, 0, 4);
+                    if (bytesRead < 4)
                     {
-                        throw new Exception("Device closed the connection unexpectedly.");
+                        throw new Exception("Failed to read the file name length.");
                     }
-                    totalBytesRead += bytesRead;
+
+                    int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
+
+                    byte[] fileNameBytes = new byte[fileNameLength];
+                    bytesRead = await sslStream.ReadAsync(fileNameBytes, 0, fileNameLength);
+                    if (bytesRead < fileNameLength)
+                    {
+                        throw new Exception("Failed to read the file name.");
+                    }
+
+                    string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+                    // Read the log file length
+                    byte[] lengthBytes = new byte[4];
+                    bytesRead = await sslStream.ReadAsync(lengthBytes, 0, 4);
+                    if (bytesRead < 4)
+                    {
+                        throw new Exception("Failed to read the log file length.");
+                    }
+
+                    int logDataLength = BitConverter.ToInt32(lengthBytes, 0);
+
+                    _logger.LogInformation("Receiving log file '{fileName}' of size {length} bytes from device {uuid}.", fileName, logDataLength, deviceUuid);
+
+                    // Read the log data
+                    byte[] logData = new byte[logDataLength];
+                    int totalBytesRead = 0;
+                    while (totalBytesRead < logDataLength)
+                    {
+                        bytesRead = await sslStream.ReadAsync(logData, totalBytesRead, logDataLength - totalBytesRead);
+                        if (bytesRead == 0)
+                        {
+                            throw new Exception("Device closed the connection unexpectedly.");
+                        }
+                        totalBytesRead += bytesRead;
+                    }
+
+                    // Save the log data to a file
+                    string logsDirectory = Path.Combine(_settings.LogsDirectory, "DeviceLogs");
+                    Directory.CreateDirectory(logsDirectory);
+                    string logFilePath = Path.Combine(logsDirectory, $"{deviceUuid}_{DateTime.UtcNow:yyyyMMddHHmmss}_{fileName}");
+
+                    await File.WriteAllBytesAsync(logFilePath, logData);
+
+                    _logger.LogInformation("Log file '{fileName}' received from device {uuid} and saved to {path}.", fileName, deviceUuid, logFilePath);
+
+                    receivedLogFiles.Add(logFilePath);
                 }
 
-                // Save the log data to a file
-                string logsDirectory = Path.Combine(_settings.LogsDirectory, "DeviceLogs");
-                Directory.CreateDirectory(logsDirectory);
-                string logFilePath = Path.Combine(logsDirectory, $"{deviceUuid}_{DateTime.UtcNow:yyyyMMddHHmmss}.zip");
-
-                await File.WriteAllBytesAsync(logFilePath, logData);
-
-                _logger.LogInformation("Logs received from device {uuid} and saved to {path}.", deviceUuid, logFilePath);
-
-                return logFilePath;
+                return receivedLogFiles.ToArray();
             }
             catch (Exception ex)
             {

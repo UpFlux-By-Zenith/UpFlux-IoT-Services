@@ -82,13 +82,14 @@ namespace UpFlux.Monitoring.Service
                         // Combine the data into one JSON object
                         var combinedData = new
                         {
+                            UUID = _settings.DeviceUuid,
                             Metrics = metrics,
                             SensorData = sensorValues
                         };
                         string jsonData = JsonSerializer.Serialize(combinedData);
 
                         // Send the data via TCP
-                        _tcpClientService.SendData(jsonData);
+                        await _tcpClientService.SendDataAsync(jsonData);
 
                         _logger.LogInformation("Data sent successfully at: {time}", DateTimeOffset.Now);
                     }

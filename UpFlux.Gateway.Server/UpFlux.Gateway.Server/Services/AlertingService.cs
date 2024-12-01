@@ -57,5 +57,26 @@ namespace UpFlux.Gateway.Server.Services
                 _logger.LogError(ex, "Failed to send alert to cloud.");
             }
         }
+
+        /// <summary>
+        /// Processes a device log event and sends it to the cloud as an alert.
+        /// </summary>
+        /// <param name="logEvent">The device log event.</param>
+        public async Task ProcessDeviceLogAsync(Alert alert)
+        {
+            _logger.LogInformation("Processing device log event: {message}", alert.Message);
+
+            try
+            {
+                // Send alert to the cloud
+                await _cloudCommunicationService.SendAlertAsync(alert);
+
+                _logger.LogInformation("Device log sent to cloud successfully.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send device log to cloud.");
+            }
+        }
     }
 }
