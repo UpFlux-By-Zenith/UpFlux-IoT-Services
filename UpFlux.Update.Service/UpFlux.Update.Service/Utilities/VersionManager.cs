@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Options;
@@ -10,13 +11,15 @@ namespace UpFlux.Update.Service.Utilities
     public class VersionManager
     {
         private readonly Configuration _config;
+        private readonly ILogger<VersionManager> _logger;
 
-        public VersionManager(IOptions<Configuration> config)
+        public VersionManager(IOptions<Configuration> config, ILogger<VersionManager> logger)
         {
             _config = config.Value;
 
             // Ensure the package directory exists
             Directory.CreateDirectory(_config.PackageDirectory);
+            _logger = logger;
         }
 
         public void StorePackage(UpdatePackage package)
@@ -66,6 +69,51 @@ namespace UpFlux.Update.Service.Utilities
         {
             List<UpdatePackage> packages = GetStoredPackages();
             return packages.FirstOrDefault(p => p.Version != currentVersion);
+        }
+
+        public UpdatePackage GetPackageByVersion(string version)
+        {
+            List<UpdatePackage> packages = GetStoredPackages();
+            return packages.FirstOrDefault(p => p.Version == version);
+        }
+
+        private string GetCurrentInstalledVersion()
+        {
+            try
+            {
+                ProcessStartInfo processStartInfo = new ProcessStartInfo
+                {
+                    FileName = "dpkg",
+                    Arguments = "-s upflux-monitoring-service",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+
+                Process process = new Process { StartInfo = processStartInfo };
+                process.Start();
+
+                string output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+
+                // Parse the output to get the version
+                string versionLine = output.Split('\n').FirstOrDefault(line => line.StartsWith("Version:"));
+                if (!string.IsNullOrEmpty(versionLine))
+                {
+                    string version = versionLine.Split(':').Last().Trim();
+                    return version;
+                }
+                else
+                {
+                    _logger.LogWarning("Could not find the version information in dpkg output.");
+                    return "Unknown";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving current installed version.");
+                return "Unknown";
+            }
         }
     }
 }

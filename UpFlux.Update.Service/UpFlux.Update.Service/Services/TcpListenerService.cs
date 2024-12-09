@@ -8,7 +8,9 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using UpFlux.Update.Service.Models;
+using UpFlux.Update.Service.Utilities;
 
 namespace UpFlux.Update.Service.Services
 {
@@ -20,8 +22,10 @@ namespace UpFlux.Update.Service.Services
         private bool _isListening;
         private readonly X509Certificate2 _clientCertificate;
         private readonly X509Certificate2 _trustedCaCertificate;
+        private readonly RollbackService _rollbackService;
+        private readonly VersionManager _versionManager;
 
-        public TcpListenerService(ILogger<TcpListenerService> logger, IOptions<Configuration> configOptions)
+        public TcpListenerService(ILogger<TcpListenerService> logger, IOptions<Configuration> configOptions, RollbackService rollbackService,VersionManager versionManager)
         {
             _logger = logger;
             _config = configOptions.Value;
@@ -34,6 +38,8 @@ namespace UpFlux.Update.Service.Services
 
             // Ensure the incoming directory exists
             Directory.CreateDirectory(_config.IncomingPackageDirectory);
+            _rollbackService = rollbackService;
+            _versionManager = versionManager;
         }
 
         public void StartListening(int port)
@@ -133,6 +139,17 @@ namespace UpFlux.Update.Service.Services
                     {
                         // Send logs to the Gateway Server
                         await SendLogsAsync(sslStream);
+                    }
+                    else if (command.StartsWith("ROLLBACK:"))
+                    {
+                        // Handle rollback command
+                        string version = command.Substring("ROLLBACK:".Length).Trim();
+                        await HandleRollbackCommandAsync(sslStream, version);
+                    }
+                    else if (command == "GET_VERSIONS")
+                    {
+                        // Handle GET_VERSIONS command
+                        await HandleGetVersionsCommandAsync(sslStream);
                     }
                     else
                     {
@@ -416,5 +433,85 @@ namespace UpFlux.Update.Service.Services
                 _logger.LogError(ex, "Failed to send notification to Gateway Server.");
             }
         }
+
+        private async Task HandleRollbackCommandAsync(SslStream sslStream, string version)
+        {
+            try
+            {
+                _logger.LogInformation("Initiating rollback to version {version}", version);
+
+                // Send acknowledgment
+                string ackMessage = "ROLLBACK_INITIATED\n";
+                byte[] ackBytes = Encoding.UTF8.GetBytes(ackMessage);
+                await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
+                await sslStream.FlushAsync();
+
+                // Perform rollback
+                bool rollbackResult = await _rollbackService.ManualRollbackAsync(version);
+
+                if (rollbackResult)
+                {
+                    _logger.LogInformation("Rollback to version {version} completed successfully.", version);
+
+                    // Send confirmation
+                    string confirmationMessage = "ROLLBACK_COMPLETED\n";
+                    byte[] confirmationBytes = Encoding.UTF8.GetBytes(confirmationMessage);
+                    await sslStream.WriteAsync(confirmationBytes, 0, confirmationBytes.Length);
+                    await sslStream.FlushAsync();
+
+                    // Send a notification back to the Gateway Server
+                    await SendNotificationAsync($"Rollback to version {version} completed successfully.");
+                }
+                else
+                {
+                    _logger.LogError("Rollback to version {version} failed.", version);
+
+                    // Send failure message
+                    string failureMessage = "ROLLBACK_FAILED\n";
+                    byte[] failureBytes = Encoding.UTF8.GetBytes(failureMessage);
+                    await sslStream.WriteAsync(failureBytes, 0, failureBytes.Length);
+                    await sslStream.FlushAsync();
+
+                    // Send a notification back to the Gateway Server
+                    await SendNotificationAsync($"Rollback to version {version} failed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during rollback to version {version}.", version);
+
+                // Send failure message
+                string failureMessage = "ROLLBACK_FAILED\n";
+                byte[] failureBytes = Encoding.UTF8.GetBytes(failureMessage);
+                await sslStream.WriteAsync(failureBytes, 0, failureBytes.Length);
+                await sslStream.FlushAsync();
+            }
+        }
+
+        private async Task HandleGetVersionsCommandAsync(SslStream sslStream)
+        {
+            try
+            {
+                _logger.LogInformation("Handling GET_VERSIONS command.");
+
+                // Get the current installed version and list of available versions
+                var versionInfo = _versionManager.GetVersionInfo();
+
+                // Serialize versionInfo to JSON
+                string versionInfoJson = JsonConvert.SerializeObject(versionInfo);
+
+                // Send the JSON string to the Gateway Server
+                byte[] versionInfoBytes = Encoding.UTF8.GetBytes(versionInfoJson + "\n");
+                await sslStream.WriteAsync(versionInfoBytes, 0, versionInfoBytes.Length);
+                await sslStream.FlushAsync();
+
+                _logger.LogInformation("Version information sent to Gateway Server.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling GET_VERSIONS command.");
+            }
+        }
+
     }
 }
