@@ -39,6 +39,35 @@ namespace UpFlux.Monitoring.Service
         /// The primary network interface to monitor
         /// </summary>
         public string NetworkInterface { get; set; } = "eth0";
+
+        /// <summary>
+        /// The path to the client certificate (device certificate)
+        /// </summary>
+        [Required]
+        public string CertificatePath { get; set; }
+
+        /// <summary>
+        /// The password for the client certificate (if any)
+        /// </summary>
+        public string CertificatePassword { get; set; }
+
+        /// <summary>
+        /// The path to the trusted CA certificate
+        /// </summary>
+        [Required]
+        public string TrustedCaCertificatePath { get; set; }
+
+        /// <summary>
+        /// The UUID of the device
+        /// </summary>
+        [Required]
+        public string DeviceUuid { get; set; }
+
+        /// <summary>
+        /// The path to store the license file
+        /// </summary>
+        [Required]
+        public string LicenseFilePath { get; set; }
     }
 }
 

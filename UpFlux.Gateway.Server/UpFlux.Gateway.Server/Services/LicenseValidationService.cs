@@ -104,7 +104,7 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogInformation("Device UUID: {uuid} registered successfully.", uuid);
 
                     // Send license to the device
-                    await _deviceCommunicationService.SendLicenseAsync(uuid, licenseResponse.License);
+                    await _deviceCommunicationService.SendLicenseToDeviceAsync(uuid, licenseResponse.License);
                 }
                 else
                 {
@@ -138,7 +138,7 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogInformation("License for device UUID: {uuid} renewed successfully.", device.UUID);
 
                     // Send updated license to the device
-                    await _deviceCommunicationService.SendLicenseAsync(device.UUID, renewalResponse.License);
+                    await _deviceCommunicationService.SendLicenseToDeviceAsync(device.UUID, renewalResponse.License);
                 }
                 else
                 {

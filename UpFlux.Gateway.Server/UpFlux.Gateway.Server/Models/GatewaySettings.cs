@@ -70,6 +70,17 @@ namespace UpFlux.Gateway.Server.Models
         /// Gets or sets the maximum number of retries for sending updates to devices.
         /// </summary>
         public int UpdateMaxRetries { get; set; } = 3;
+
+        /// <summary>
+        /// Gets or sets the directory path for storing device logs.
+        /// </summary>
+        [Required]
+        public string LogsDirectory { get; set; }
+
+        /// <summary>
+        /// Gets or sets the directory path for storing update packages.
+        /// </summary>
+        public string UpdatePackageDirectory { get; set; }
     }
 }
 

@@ -37,14 +37,17 @@ namespace UpFlux.Gateway.Server.Services
         {
             _logger.LogInformation("Starting log collection for device {uuid}.", deviceUuid);
 
-            string logFilePath = await _deviceCommunicationService.RequestLogsAsync(deviceUuid);
+            string[] logFilePaths = await _deviceCommunicationService.RequestLogsAsync(deviceUuid);
 
-            if (!string.IsNullOrEmpty(logFilePath))
+            if (logFilePaths != null && logFilePaths.Length > 0)
             {
-                _logger.LogInformation("Log file {path} received from device {uuid}.", logFilePath, deviceUuid);
+                foreach (var logFilePath in logFilePaths)
+                {
+                    _logger.LogInformation("Log file {path} received from device {uuid}.", logFilePath, deviceUuid);
 
-                // Send the log file to the cloud
-                await _cloudCommunicationService.SendDeviceLogsAsync(deviceUuid, logFilePath);
+                    // Send the log file to the cloud
+                    await _cloudCommunicationService.SendDeviceLogsAsync(deviceUuid, logFilePath);
+                }
             }
             else
             {
