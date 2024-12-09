@@ -115,5 +115,22 @@ namespace UpFlux.Update.Service.Utilities
                 return "Unknown";
             }
         }
+
+        /// <summary>
+        /// Retrieves the current installed version and all available versions from the package directory.
+        /// </summary>
+        /// <returns>An object containing the current version and a list of available versions.</returns>
+        public object GetVersionInfo()
+        {
+            string currentVersion = GetCurrentInstalledVersion();
+            List<UpdatePackage> packages = GetStoredPackages();
+            List<string> availableVersions = packages.Select(p => p.Version).ToList();
+
+            return new
+            {
+                CurrentVersion = currentVersion,
+                AvailableVersions = availableVersions
+            };
+        }
     }
 }

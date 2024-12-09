@@ -495,7 +495,7 @@ namespace UpFlux.Update.Service.Services
                 _logger.LogInformation("Handling GET_VERSIONS command.");
 
                 // Get the current installed version and list of available versions
-                var versionInfo = _versionManager.GetVersionInfo();
+                object versionInfo = _versionManager.GetVersionInfo();
 
                 // Serialize versionInfo to JSON
                 string versionInfoJson = JsonConvert.SerializeObject(versionInfo);
