@@ -293,7 +293,7 @@ namespace UpFlux.Gateway.Server.Services
                     else if (message == "READY_FOR_LICENSE")
                     {
                         if (!string.IsNullOrWhiteSpace(device.License))
-                            await SendLicenseAsync(device.UUID, device.License, sslStream).ConfigureAwait(false);
+                            await SendLicenseToDeviceAsync(device.UUID, device.License).ConfigureAwait(false);
                         else
                             _logger.LogWarning("No license available to send to device {uuid}.", device.UUID);
                     }
@@ -364,17 +364,44 @@ namespace UpFlux.Gateway.Server.Services
         /// <summary>
         /// Sends a license to the device.
         /// </summary>
-        private async Task SendLicenseAsync(string uuid, string license, SslStream sslStream)
+        /// <summary>
+        /// Sends a license to a device by connecting as a client.
+        /// </summary>
+        public async Task<bool> SendLicenseToDeviceAsync(string uuid, string license)
         {
+            Device device = _deviceRepository.GetDeviceByUuid(uuid);
+            if (device == null)
+            {
+                _logger.LogWarning("Device with UUID '{uuid}' not found.", uuid);
+                return false;
+            }
+
             try
             {
-                string licenseMessage = $"LICENSE:{license}\n";
-                await SendMessageAsync(sslStream, licenseMessage).ConfigureAwait(false);
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
+
+                await sslStream.AuthenticateAsClientAsync(
+                    device.IPAddress,
+                    new X509CertificateCollection { _clientCertificate },
+                    System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
+
+                // Directly send the license
+                await SendMessageAsync(sslStream, $"LICENSE:{license}\n").ConfigureAwait(false);
                 _logger.LogInformation("License sent to device UUID: {uuid}", uuid);
+                return true;
+
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send license to device UUID: {uuid}", uuid);
+                return false;
             }
         }
 
