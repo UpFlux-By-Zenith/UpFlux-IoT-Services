@@ -17,6 +17,7 @@ namespace UpFlux.Gateway.Server.Services
     {
         private readonly ILogger<CommandExecutionService> _logger;
         private readonly DeviceCommunicationService _deviceCommunicationService;
+        private readonly CloudCommunicationService _cloudCommunicationService;
         private readonly ConcurrentDictionary<string, CommandStatus> _commandStatuses;
 
         /// <summary>
@@ -26,10 +27,12 @@ namespace UpFlux.Gateway.Server.Services
         /// <param name="deviceCommunicationService">Service for communication with devices.</param>
         public CommandExecutionService(
             ILogger<CommandExecutionService> logger,
-            DeviceCommunicationService deviceCommunicationService)
+            DeviceCommunicationService deviceCommunicationService,
+            CloudCommunicationService cloudCommunicationService)
         {
             _logger = logger;
             _deviceCommunicationService = deviceCommunicationService;
+            _cloudCommunicationService = cloudCommunicationService;
             _commandStatuses = new ConcurrentDictionary<string, CommandStatus>();
         }
 
@@ -66,6 +69,9 @@ namespace UpFlux.Gateway.Server.Services
 
                 // Execute the command on devices
                 await ExecuteCommandAsync(command, commandStatus);
+
+                // Report statuses back to the cloud
+                await ReportCommandStatusAsync(commandStatus);
             }
             catch (Exception ex)
             {
@@ -144,9 +150,6 @@ namespace UpFlux.Gateway.Server.Services
             await Task.WhenAll(tasks);
 
             _logger.LogInformation("Command {commandId} execution completed.", command.CommandId);
-
-            // Report statuses back to the cloud
-            await ReportCommandStatusAsync(commandStatus);
         }
 
         /// <summary>
@@ -158,10 +161,19 @@ namespace UpFlux.Gateway.Server.Services
         {
             _logger.LogInformation("Reporting status of command {commandId} back to the cloud.", commandStatus.CommandId);
 
-            // Implement logic to report status back to the cloud using CloudCommunicationService to send the status
+            // Create an alert or status message
+            Alert alert = new Alert
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                Level = "Information",
+                Message = $"Command {commandStatus.CommandId} of type {commandStatus.CommandType} executed. " +
+                          $"Succeeded on devices: {string.Join(", ", commandStatus.DevicesSucceeded)}. " +
+                          $"Failed on devices: {string.Join(", ", commandStatus.DevicesFailed)}.",
+                Source = "GatewayServer"
+            };
 
-            // Placeholder
-            await Task.CompletedTask;
+            // Send alert to the cloud
+            await _cloudCommunicationService.SendAlertAsync(alert);
         }
 
         /// <summary>

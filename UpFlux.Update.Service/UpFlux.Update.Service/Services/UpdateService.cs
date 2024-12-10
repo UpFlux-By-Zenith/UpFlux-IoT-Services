@@ -19,7 +19,6 @@ namespace UpFlux.Update.Service.Services
         private readonly InstallationService _installationService;
         private readonly LogMonitoringService _logMonitoringService;
         private readonly RollbackService _rollbackService;
-        private readonly GatewayNotificationService _gatewayNotificationService;
 
         public UpdateService(
             ILogger<UpdateService> logger,
@@ -30,8 +29,7 @@ namespace UpFlux.Update.Service.Services
             SimulationService simulationService,
             InstallationService installationService,
             LogMonitoringService logMonitoringService,
-            RollbackService rollbackService,
-            GatewayNotificationService gatewayNotificationService)
+            RollbackService rollbackService)
         {
             _logger = logger;
             _tcpListenerService = tcpListenerService;
@@ -41,7 +39,6 @@ namespace UpFlux.Update.Service.Services
             _installationService = installationService;
             _logMonitoringService = logMonitoringService;
             _rollbackService = rollbackService;
-            _gatewayNotificationService = gatewayNotificationService;
             _config = configOptions.Value;
         }
 
@@ -77,7 +74,7 @@ namespace UpFlux.Update.Service.Services
                 if (!simulationResult)
                 {
                     _logger.LogError("Simulation failed. Aborting update.");
-                    await _gatewayNotificationService.SendLogAsync("Simulation failed for version " + package.Version);
+                    await _tcpListenerService.SendNotificationAsync("Simulation failed for version " + package.Version);
                     return;
                 }
 
@@ -86,7 +83,7 @@ namespace UpFlux.Update.Service.Services
                 if (!installationResult)
                 {
                     _logger.LogError("Installation failed. Aborting update.");
-                    await _gatewayNotificationService.SendLogAsync("Installation failed for version " + package.Version);
+                    await _tcpListenerService.SendNotificationAsync("Installation failed for version " + package.Version);
                     return;
                 }
 
@@ -95,30 +92,30 @@ namespace UpFlux.Update.Service.Services
                 if (!monitoringResult)
                 {
                     _logger.LogError("Errors detected after installation. Initiating rollback.");
-                    await _gatewayNotificationService.SendLogAsync("Errors detected after installation of version " + package.Version);
+                    await _tcpListenerService.SendNotificationAsync("Errors detected after installation of version " + package.Version);
 
                     UpdatePackage previousPackage = _versionManager.GetPreviousVersion(package.Version);
                     if (previousPackage != null)
                     {
                         await _rollbackService.RollbackAsync(previousPackage);
-                        await _gatewayNotificationService.SendLogAsync("Rolled back to version " + previousPackage.Version);
+                        await _tcpListenerService.SendNotificationAsync("Rolled back to version " + previousPackage.Version);
                     }
                     else
                     {
                         _logger.LogError("No previous version available for rollback.");
-                        await _gatewayNotificationService.SendLogAsync("No previous version available for rollback.");
+                        await _tcpListenerService.SendNotificationAsync("No previous version available for rollback.");
                     }
                 }
                 else
                 {
                     _logger.LogInformation("Update installed successfully and is running without errors.");
-                    await _gatewayNotificationService.SendLogAsync("Update to version " + package.Version + " installed successfully.");
+                    await _tcpListenerService.SendNotificationAsync("Update to version " + package.Version + " installed successfully.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during the update process.");
-                await _gatewayNotificationService.SendLogAsync("An error occurred during the update process: " + ex.Message);
+                await _tcpListenerService.SendNotificationAsync("An error occurred during the update process: " + ex.Message);
             }
         }
 
