@@ -1,12 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace UpFlux.Cloud.Simulator
 {
-    internal class CloudSettings
+    public class CloudSettings
     {
+        public int ListeningPort { get; set; } = 5002;
+
+        [Required]
+        public string CertificatePath { get; set; }
+
+        public string CertificatePassword { get; set; }
+
+        [Required]
+        public string TrustedCaCertificatePath { get; set; }
+
+        [Required]
+        public string GatewayAddress { get; set; }
+
+        public bool SkipServerCertificateValidation { get; set; } = false;
     }
 }
