@@ -125,34 +125,40 @@ namespace UpFlux.Monitoring.Service
             {
                 string licensePath = _settings.LicenseFilePath;
 
-                if (File.Exists(licensePath))
+                if (!File.Exists(licensePath))
                 {
-                    string licenseContent = File.ReadAllText(licensePath);
+                    _logger.LogWarning("License file not found at {path}.", licensePath);
+                    return false;
+                }
 
-                    // Deserialize the license data
-                    LicenseData licenseData = JsonSerializer.Deserialize<LicenseData>(licenseContent);
+                // Load the XML content
+                string licenseContent = File.ReadAllText(licensePath);
 
-                    if (licenseData != null)
-                    {
-                        if (licenseData.ExpirationDate > DateTime.UtcNow)
-                        {
-                            return true;
-                        }
-                        else
-                        {
-                            _logger.LogWarning("License has expired.");
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("License data is invalid.");
-                        return false;
-                    }
+                // Parse as XML
+                System.Xml.XmlDocument xmlDoc = new System.Xml.XmlDocument();
+                xmlDoc.LoadXml(licenseContent);
+
+                // Get the <ExpirationDate> node
+                System.Xml.XmlNode? expirationNode = xmlDoc.SelectSingleNode("//License/ExpirationDate");
+                if (expirationNode == null)
+                {
+                    _logger.LogWarning("Invalid license file: missing <ExpirationDate> node.");
+                    return false;
+                }
+
+                // The "o" format is standard ISO 8601 - "2024-10-01T12:00:00Z"
+                DateTime expirationDate = DateTime.Parse(
+                    expirationNode.InnerText,
+                    null,
+                    System.Globalization.DateTimeStyles.RoundtripKind);
+
+                if (expirationDate > DateTime.UtcNow)
+                {
+                    return true;
                 }
                 else
                 {
-                    _logger.LogWarning("License file not found at {path}.", licensePath);
+                    _logger.LogWarning("License has expired (expired at {0}).", expirationDate);
                     return false;
                 }
             }

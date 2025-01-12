@@ -24,10 +24,17 @@ namespace UpFlux.Cloud.Simulator
             Console.WriteLine();
             bool approved = (key == 'y' || key == 'Y');
 
+            string xmlLicense = $@"
+                <License>
+                  <ExpirationDate>{DateTime.UtcNow.AddMonths(1):o}</ExpirationDate>
+                  <MachineId>{request.Uuid}</MachineId>
+                  <Signature>TestBase64Signature</Signature>
+                </License>";
+
             DeviceRegistrationResponse response = new DeviceRegistrationResponse
             {
                 Approved = approved,
-                License = approved ? "MOCK_LICENSE_ABC" : "",
+                License = approved ? xmlLicense : "",
                 ExpirationDate = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow.AddMonths(1))
             };
             return Task.FromResult(response);
@@ -42,10 +49,17 @@ namespace UpFlux.Cloud.Simulator
             Console.WriteLine();
             bool approved = (key == 'y' || key == 'Y');
 
+            string xmlLicense = $@"
+                <License>
+                  <ExpirationDate>{DateTime.UtcNow.AddMonths(2):o}</ExpirationDate>
+                  <MachineId>{request.Uuid}</MachineId>
+                  <Signature>TestBase64SignatureIfAny</Signature>
+                </License>";
+
             LicenseRenewalResponse response = new LicenseRenewalResponse
             {
                 Approved = approved,
-                License = approved ? "MOCK_LICENSE_RENEWED" : "",
+                License = approved ? xmlLicense : "",
                 ExpirationDate = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow.AddMonths(2))
             };
             return Task.FromResult(response);
