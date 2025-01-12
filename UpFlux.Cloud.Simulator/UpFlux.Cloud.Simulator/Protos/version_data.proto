@@ -1,0 +1,32 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+package versiondata;
+
+import "google/protobuf/timestamp.proto";
+
+// Service definition for version data retrieval
+service VersionDataService {
+  rpc RequestVersionData (VersionDataRequest) returns (VersionDataResponse);
+}
+
+message VersionDataRequest {
+  // 
+}
+
+message DeviceVersions {
+  string deviceUuid = 1;
+  repeated VersionInfo versions = 2;
+}
+
+message VersionInfo {
+  string version = 1;
+  google.protobuf.Timestamp installedAt = 2;
+}
+
+message VersionDataResponse {
+  bool success = 1;
+  string message = 2;
+  repeated DeviceVersions deviceVersionsList = 3;
+}
