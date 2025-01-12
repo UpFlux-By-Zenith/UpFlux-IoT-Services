@@ -35,18 +35,42 @@ namespace UpFlux.Gateway.Server.Services
         /// <param name="settings">Gateway settings.</param>
         public CloudCommunicationService(
             ILogger<CloudCommunicationService> logger,
-            IOptions<GatewaySettings> settings,
-            AlertService.AlertServiceClient alertClient)
+            IOptions<GatewaySettings> settings)
         {
             _logger = logger;
             _settings = settings.Value;
-            _alertClient = alertClient;
 
             HttpClientHandler handler = new HttpClientHandler();
-            handler.ClientCertificates.Add(new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword));
 
-            // Trust the cloud server's certificate (optional if using a trusted CA - we need to decide as a team)
-            handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            // Load the trusted CA certificate from the configured path
+            X509Certificate2 caCertificate = new X509Certificate2(_settings.TrustedCaCertificatePath);
+
+            // Create an X509Chain with the trusted CA
+            handler.ServerCertificateCustomValidationCallback = (httpRequestMessage, cert, chain, sslPolicyErrors) =>
+            {
+                if (sslPolicyErrors == System.Net.Security.SslPolicyErrors.None)
+                    return true;
+
+                X509Chain customChain = new X509Chain();
+                customChain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+                customChain.ChainPolicy.ExtraStore.Add(caCertificate);
+                customChain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+
+                // Build the chain for the server certificate
+                bool isValid = customChain.Build((X509Certificate2)cert);
+
+                if (!isValid)
+                {
+                    foreach (X509ChainStatus status in customChain.ChainStatus)
+                    {
+                        _logger.LogWarning("Certificate validation error: {status}", status.StatusInformation);
+                    }
+                }
+
+                return isValid;
+            };
+
+            handler.ClientCertificates.Add(new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword));
 
             HttpClient httpClient = new HttpClient(handler);
 
@@ -57,6 +81,8 @@ namespace UpFlux.Gateway.Server.Services
 
             _client = new LicenseService.LicenseServiceClient(channel);
             _monitoringClient = new MonitoringService.MonitoringServiceClient(channel);
+            _cloudLogClient = new CloudLogService.CloudLogServiceClient(channel);
+            _alertClient = new AlertService.AlertServiceClient(channel);
 
             // Configure retry policy using Polly
             _retryPolicy = Policy.Handle<RpcException>(ex => IsTransientFault(ex))

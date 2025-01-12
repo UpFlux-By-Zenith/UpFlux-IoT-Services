@@ -109,7 +109,12 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using NetworkStream networkStream = client.GetStream();
-                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
+                // Using the server certificate to authenticate
+                using SslStream sslStream = new SslStream(
+                    networkStream,
+                    leaveInnerStreamOpen: false,
+                    userCertificateValidationCallback: ValidateDeviceCertificate
+                );
 
                 await sslStream.AuthenticateAsServerAsync(
                     _serverCertificate,
@@ -149,7 +154,11 @@ namespace UpFlux.Gateway.Server.Services
             bool isValid = chain.Build((X509Certificate2)certificate);
             if (!isValid)
             {
-                _logger.LogWarning("Device certificate chain validation failed: {errors}", chain.ChainStatus);
+                // Log chain status
+                foreach (var status in chain.ChainStatus)
+                {
+                    _logger.LogWarning("Certificate chain status: {status}", status.StatusInformation);
+                }
                 return false;
             }
 

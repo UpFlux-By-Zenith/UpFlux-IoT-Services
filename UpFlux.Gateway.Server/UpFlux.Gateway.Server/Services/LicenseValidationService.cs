@@ -21,7 +21,7 @@ namespace UpFlux.Gateway.Server.Services
         private readonly GatewaySettings _settings;
         private readonly DeviceRepository _deviceRepository;
         private readonly CloudCommunicationService _cloudCommunicationService;
-        private readonly DeviceCommunicationService _deviceCommunicationService;
+        private readonly ILicensePusher _licensePusher;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LicenseValidationService"/> class.
@@ -30,19 +30,19 @@ namespace UpFlux.Gateway.Server.Services
         /// <param name="settings">Gateway settings.</param>
         /// <param name="deviceRepository">Repository for device data.</param>
         /// <param name="cloudCommunicationService">Service for cloud communication.</param>
-        /// <param name="deviceCommunicationService">Service for device communication.</param>
         public LicenseValidationService(
             ILogger<LicenseValidationService> logger,
             IOptions<GatewaySettings> settings,
             DeviceRepository deviceRepository,
             CloudCommunicationService cloudCommunicationService,
-            DeviceCommunicationService deviceCommunicationService)
+            ILicensePusher licensePusher)
         {
             _logger = logger;
             _settings = settings.Value;
             _deviceRepository = deviceRepository;
             _cloudCommunicationService = cloudCommunicationService;
-            _deviceCommunicationService = deviceCommunicationService;
+            _licensePusher = licensePusher;
+
         }
 
         /// <summary>
@@ -104,7 +104,11 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogInformation("Device UUID: {uuid} registered successfully.", uuid);
 
                     // Send license to the device
-                    await _deviceCommunicationService.SendLicenseToDeviceAsync(uuid, licenseResponse.License);
+                    bool success = await _licensePusher.SendLicenseAsync(uuid, licenseResponse.License);
+                    if (!success)
+                    {
+                        _logger.LogWarning("Failed to push license to device {uuid}.", uuid);
+                    }
                 }
                 else
                 {
@@ -138,7 +142,11 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogInformation("License for device UUID: {uuid} renewed successfully.", device.UUID);
 
                     // Send updated license to the device
-                    await _deviceCommunicationService.SendLicenseToDeviceAsync(device.UUID, renewalResponse.License);
+                    bool success = await _licensePusher.SendLicenseAsync(device.UUID, renewalResponse.License);
+                    if (!success)
+                    {
+                        _logger.LogWarning("Failed to push renewed license to device {uuid}.", device.UUID);
+                    }
                 }
                 else
                 {
