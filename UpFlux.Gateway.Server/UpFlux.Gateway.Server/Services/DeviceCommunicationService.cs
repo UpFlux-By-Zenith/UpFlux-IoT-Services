@@ -73,9 +73,9 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         public void StartListening()
         {
-            _listener = new TcpListener(IPAddress.Any, _settings.TcpPort);
+            _listener = new TcpListener(IPAddress.Any, _settings.GatewayTcpPort);
             _listener.Start();
-            _logger.LogInformation("DeviceCommunicationService started listening on port {port}", _settings.TcpPort);
+            _logger.LogInformation("DeviceCommunicationService started listening on port {port}", _settings.GatewayTcpPort);
             AcceptConnectionsAsync();
         }
 
@@ -173,7 +173,7 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(ipAddress), _settings.TcpPort);
+                await client.ConnectAsync(IPAddress.Parse(ipAddress), _settings.DeviceTcpPort);
 
                 using NetworkStream networkStream = client.GetStream();
                 using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
@@ -425,7 +425,7 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort);
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort);
 
                 using NetworkStream networkStream = client.GetStream();
                 using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
@@ -466,7 +466,7 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort).ConfigureAwait(false);
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort).ConfigureAwait(false);
 
                 using NetworkStream networkStream = client.GetStream();
                 using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
@@ -525,7 +525,7 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort).ConfigureAwait(false);
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort).ConfigureAwait(false);
 
                 using NetworkStream networkStream = client.GetStream();
                 using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
@@ -576,7 +576,7 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort).ConfigureAwait(false);
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort).ConfigureAwait(false);
 
                 using NetworkStream networkStream = client.GetStream();
                 using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);
@@ -643,7 +643,7 @@ namespace UpFlux.Gateway.Server.Services
             try
             {
                 using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.TcpPort).ConfigureAwait(false);
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort).ConfigureAwait(false);
 
                 using NetworkStream networkStream = client.GetStream();
                 using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate);

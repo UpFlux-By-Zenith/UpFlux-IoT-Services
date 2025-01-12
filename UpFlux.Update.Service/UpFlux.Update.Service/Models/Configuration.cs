@@ -15,6 +15,9 @@ namespace UpFlux.Update.Service.Models
         public int GatewayServerPort { get; set; }
 
         [Required]
+        public int DeviceServerPort { get; set; }
+
+        [Required]
         public string IncomingPackageDirectory { get; set; }
 
         [Required]

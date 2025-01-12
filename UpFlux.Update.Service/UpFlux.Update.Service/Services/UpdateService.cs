@@ -47,7 +47,7 @@ namespace UpFlux.Update.Service.Services
             _logger.LogInformation("UpFlux Update Service is starting.");
 
             // Start the TCP listener
-            _tcpListenerService.StartListening(_config.GatewayServerPort);
+            _tcpListenerService.StartListening(_config.DeviceServerPort);
 
             // Start the file system watcher
             _fileWatcherService.PackageDetected += async (sender, package) => await HandlePackageAsync(package);
