@@ -12,12 +12,17 @@ UpFlux.Update.Service/UpFlux.Update.Service/bin
 UpFlux.Gateway.Server/UpFlux.Gateway.Server/obj
 UpFlux.Gateway.Server/UpFlux.Gateway.Server/bin
 UpFlux.Gateway.Server/UpFlux.Gateway.Server/Certificates/
+UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator/obj
+UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator/bin
+UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator/Certificates/
+UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator/appsettings.json
 
 # Visual Studio
 UpFlux.Monitoring.Library/.vs/
 UpFlux.Monitoring.Service/.vs/
 UpFlux.Update.Service/.vs/
 UpFlux.Gateway.Server/.vs/
+UpFlux.Cloud.Simulator/.vs/
 .vs
 
 # Publish Profile User
