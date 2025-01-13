@@ -19,8 +19,6 @@ namespace UpFlux.Monitoring.Service
         private readonly int _serverPort;
         private readonly ILogger<TcpClientService> _logger;
         private readonly ServiceSettings _settings;
-        private readonly X509Certificate2 _clientCertificate;
-        private readonly X509Certificate2 _trustedCaCertificate;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpClientService"/> class.
@@ -31,12 +29,6 @@ namespace UpFlux.Monitoring.Service
             _serverIp = _settings.ServerIp;
             _serverPort = _settings.ServerPort;
             _logger = logger;
-
-            // Load client certificate
-            _clientCertificate = new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword);
-
-            // Load trusted CA certificate
-            _trustedCaCertificate = new X509Certificate2(_settings.TrustedCaCertificatePath);
         }
 
         /// <summary>
@@ -50,37 +42,25 @@ namespace UpFlux.Monitoring.Service
                 await client.ConnectAsync(_settings.ServerIp, _settings.ServerPort);
 
                 using NetworkStream networkStream = client.GetStream();
-                using SslStream sslStream = new SslStream(
-                    networkStream,
-                    false,
-                    ValidateServerCertificate,
-                    SelectLocalCertificate);
-
-                // Authenticate as client
-                await sslStream.AuthenticateAsClientAsync(
-                    _settings.ServerIp,
-                    new X509CertificateCollection { _clientCertificate },
-                    System.Security.Authentication.SslProtocols.Tls13,
-                    checkCertificateRevocation: false);
-
-                _logger.LogInformation("Secure connection established with the Gateway Server.");
+                
+                _logger.LogInformation("Connection established with the Gateway Server.");
 
                 // Send Device UUID to the Gateway Server
                 string uuidMessage = $"{_settings.DeviceUuid}\n";
                 byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
-                await sslStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                await networkStream.FlushAsync();
 
                 // Send monitoring data
                 string message = $"MONITORING_DATA:{data}\n";
                 byte[] messageBytes = Encoding.UTF8.GetBytes(message);
-                await sslStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                await networkStream.FlushAsync();
 
                 _logger.LogInformation("Monitoring data sent to Gateway Server.");
 
                 // Read acknowledgment
-                string response = await ReadMessageAsync(sslStream);
+                string response = await ReadMessageAsync(networkStream);
                 if (response == "DATA_RECEIVED")
                 {
                     _logger.LogInformation("Gateway Server acknowledged data reception.");
@@ -101,7 +81,7 @@ namespace UpFlux.Monitoring.Service
         /// </summary>
         /// <param name="sslStream">SSL stream to read from</param>
         /// <returns>Returns the message read from the stream</returns>
-        private async Task<string> ReadMessageAsync(SslStream sslStream)
+        private async Task<string> ReadMessageAsync(NetworkStream networkStream)
         {
             StringBuilder messageData = new StringBuilder();
             byte[] buffer = new byte[1024];
@@ -109,7 +89,7 @@ namespace UpFlux.Monitoring.Service
 
             do
             {
-                bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length);
                 if (bytesRead == 0)
                 {
                     break;
@@ -128,35 +108,9 @@ namespace UpFlux.Monitoring.Service
         }
 
         /// <summary>
-        /// Validates the server's certificate.
+        /// Helper method to read a message from the network stream asynchronously.
         /// </summary>
-        private bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
-        {
-            // Validate server certificate against trusted CA
-            if (sslPolicyErrors == SslPolicyErrors.None)
-                return true;
-
-            _logger.LogWarning("Server certificate validation failed: {errors}", sslPolicyErrors);
-            return false;
-        }
-
-        /// <summary>
-        /// Selects the local client certificate.
-        /// </summary>
-        private X509Certificate SelectLocalCertificate(
-            object sender,
-            string targetHost,
-            X509CertificateCollection localCertificates,
-            X509Certificate remoteCertificate,
-            string[] acceptableIssuers)
-        {
-            return _clientCertificate;
-        }
-
-        /// <summary>
-        /// Reads a message from the SSL stream until a newline character is encountered.
-        /// </summary>
-        private string ReadMessage(SslStream sslStream)
+        private string ReadMessage(NetworkStream networkStream)
         {
             StringBuilder messageData = new StringBuilder();
             byte[] buffer = new byte[2048];
@@ -164,7 +118,7 @@ namespace UpFlux.Monitoring.Service
 
             do
             {
-                bytes = sslStream.Read(buffer, 0, buffer.Length);
+                bytes = networkStream.Read(buffer, 0, buffer.Length);
 
                 Decoder decoder = Encoding.UTF8.GetDecoder();
                 char[] chars = new char[decoder.GetCharCount(buffer, 0, bytes)];
@@ -227,38 +181,28 @@ namespace UpFlux.Monitoring.Service
 
                     using (NetworkStream networkStream = client.GetStream())
                     {
-                        using (SslStream sslStream = new SslStream(
-                            networkStream,
-                            false,
-                            new RemoteCertificateValidationCallback(ValidateServerCertificate),
-                            new LocalCertificateSelectionCallback(SelectLocalCertificate)))
+                        _logger.LogInformation("Connection established with the server.");
+
+                        // Send License Renewal Request Command
+                        string command = "RENEW_LICENSE\n";
+                        byte[] commandBytes = Encoding.UTF8.GetBytes(command);
+                        networkStream.Write(commandBytes, 0, commandBytes.Length);
+                        networkStream.Flush();
+
+                        _logger.LogInformation("License renewal request sent to server.");
+
+                        // Receive updated License from Server
+                        string license = ReadMessage(networkStream);
+                        if (!string.IsNullOrEmpty(license))
                         {
-                            // Authenticate as client
-                            sslStream.AuthenticateAsClient(_serverIp, new X509CertificateCollection { _clientCertificate }, System.Security.Authentication.SslProtocols.Tls13, false);
+                            _logger.LogInformation("Updated license received from server.");
 
-                            _logger.LogInformation("Secure connection established with the server.");
-
-                            // Send License Renewal Request Command
-                            string command = "RENEW_LICENSE\n";
-                            byte[] commandBytes = Encoding.UTF8.GetBytes(command);
-                            sslStream.Write(commandBytes, 0, commandBytes.Length);
-                            sslStream.Flush();
-
-                            _logger.LogInformation("License renewal request sent to server.");
-
-                            // Receive updated License from Server
-                            string license = ReadMessage(sslStream);
-                            if (!string.IsNullOrEmpty(license))
-                            {
-                                _logger.LogInformation("Updated license received from server.");
-
-                                // Store license securely
-                                StoreLicense(license);
-                            }
-                            else
-                            {
-                                _logger.LogWarning("No license received from server.");
-                            }
+                            // Store license securely
+                            StoreLicense(license);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("No license received from server.");
                         }
                     }
                 }

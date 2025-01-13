@@ -12,7 +12,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using UpFlux.Gateway.Server.Models;
+using UpFlux.Gateway.Server.Protos;
 using UpFlux.Gateway.Server.Repositories;
+using VersionInfo = UpFlux.Gateway.Server.Models.VersionInfo;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -31,10 +33,10 @@ namespace UpFlux.Gateway.Server.Services
     {
         private readonly ILogger<DeviceCommunicationService> _logger;
         private readonly GatewaySettings _settings;
-        private readonly LicenseValidationService _licenseValidationService;
         private readonly DeviceRepository _deviceRepository;
         private readonly DataAggregationService _dataAggregationService;
         private readonly AlertingService _alertingService;
+        private readonly CloudCommunicationService _cloudCommunicationService;
 
         private readonly X509Certificate2 _serverCertificate;
         private readonly X509Certificate2 _trustedCaCertificate;
@@ -48,17 +50,17 @@ namespace UpFlux.Gateway.Server.Services
         public DeviceCommunicationService(
             ILogger<DeviceCommunicationService> logger,
             IOptions<GatewaySettings> options,
-            LicenseValidationService licenseValidationService,
             DeviceRepository deviceRepository,
             DataAggregationService dataAggregationService,
-            AlertingService alertingService)
+            AlertingService alertingService,
+            CloudCommunicationService cloudCommunicationService)
         {
             _logger = logger;
             _settings = options.Value;
-            _licenseValidationService = licenseValidationService;
             _deviceRepository = deviceRepository;
             _dataAggregationService = dataAggregationService;
             _alertingService = alertingService;
+            _cloudCommunicationService = cloudCommunicationService;
 
             // Load certificates
             _serverCertificate = new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword);
@@ -73,7 +75,7 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         public void StartListening()
         {
-            _listener = new TcpListener(IPAddress.Any, _settings.GatewayTcpPort);
+            _listener = new TcpListener(IPAddress.Parse(_settings.GatewayServerIp), _settings.GatewayTcpPort);
             _listener.Start();
             _logger.LogInformation("DeviceCommunicationService started listening on port {port}", _settings.GatewayTcpPort);
             AcceptConnectionsAsync();
@@ -139,34 +141,74 @@ namespace UpFlux.Gateway.Server.Services
         /// <summary>
         /// Validates the device certificate during TLS handshake.
         /// </summary>
-        private bool ValidateDeviceCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        //private bool ValidateDeviceCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        //{
+        //    if (sslPolicyErrors != SslPolicyErrors.None)
+        //    {
+        //        _logger.LogWarning("SSL policy errors during device certificate validation: {errors}", sslPolicyErrors);
+        //        return false;
+        //    }
+
+        //    chain.ChainPolicy.ExtraStore.Add(_trustedCaCertificate);
+        //    chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+        //    chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+        //    bool isValid = chain.Build((X509Certificate2)certificate);
+        //    if (!isValid)
+        //    {
+        //        // Log chain status
+        //        foreach (var status in chain.ChainStatus)
+        //        {
+        //            _logger.LogWarning("Certificate chain status: {status}", status.StatusInformation);
+        //        }
+        //        return false;
+        //    }
+
+        //    string deviceUuid = GetUuidFromCertificate((X509Certificate2)certificate);
+        //    if (string.IsNullOrEmpty(deviceUuid))
+        //    {
+        //        _logger.LogWarning("Device certificate does not contain a UUID in Subject.");
+        //        return false;
+        //    }
+
+        //    return true;
+        //}
+
+        private bool ValidateDeviceCertificate(
+            object sender,
+            X509Certificate certificate,
+            X509Chain chain,
+            SslPolicyErrors sslPolicyErrors)
         {
-            if (sslPolicyErrors != SslPolicyErrors.None)
-            {
-                _logger.LogWarning("SSL policy errors during device certificate validation: {errors}", sslPolicyErrors);
-                return false;
-            }
-
-            chain.ChainPolicy.ExtraStore.Add(_trustedCaCertificate);
-            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
-            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-
-            bool isValid = chain.Build((X509Certificate2)certificate);
-            if (!isValid)
-            {
-                // Log chain status
-                foreach (var status in chain.ChainStatus)
-                {
-                    _logger.LogWarning("Certificate chain status: {status}", status.StatusInformation);
-                }
-                return false;
-            }
-
+            // Always parse the device’s CN
             string deviceUuid = GetUuidFromCertificate((X509Certificate2)certificate);
             if (string.IsNullOrEmpty(deviceUuid))
             {
                 _logger.LogWarning("Device certificate does not contain a UUID in Subject.");
                 return false;
+            }
+
+            // Attempt chain build but at the moment ignore errors
+            chain.ChainPolicy.ExtraStore.Add(_trustedCaCertificate);
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority
+                                                  | X509VerificationFlags.IgnoreNotTimeValid
+                                                  | X509VerificationFlags.IgnoreEndRevocationUnknown
+                                                  | X509VerificationFlags.IgnoreCtlNotTimeValid
+                                                  | X509VerificationFlags.IgnoreRootRevocationUnknown
+                                                  | X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown
+                                                  | X509VerificationFlags.IgnoreEndRevocationUnknown
+                                                  | X509VerificationFlags.IgnoreWrongUsage;
+
+            bool chainBuilt = chain.Build((X509Certificate2)certificate);
+
+            if (!chainBuilt)
+            {
+                _logger.LogWarning("Chain build failed but ignoring. Chain status:");
+                foreach (var status in chain.ChainStatus)
+                {
+                    _logger.LogWarning("  {status}", status.StatusInformation);
+                }
             }
 
             return true;
@@ -243,7 +285,8 @@ namespace UpFlux.Gateway.Server.Services
                 device.LastSeen = DateTime.UtcNow;
                 _deviceRepository.AddOrUpdateDevice(device);
 
-                bool isLicenseValid = await _licenseValidationService.ValidateLicenseAsync(uuid).ConfigureAwait(false);
+                //bool isLicenseValid = await _licenseValidationService.ValidateLicenseAsync(uuid).ConfigureAwait(false);
+                bool isLicenseValid = await ValidateLicenseAsync(uuid);
 
                 device = _deviceRepository.GetDeviceByUuid(uuid);
                 if (isLicenseValid)
@@ -416,47 +459,6 @@ namespace UpFlux.Gateway.Server.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send license to device UUID: {uuid}", uuid);
-            }
-        }
-
-        /// <summary>
-        /// Sends a license to a device by connecting as a client.
-        /// </summary>
-        public async Task<bool> SendLicenseToDeviceAsync(string uuid, string license)
-        {
-            Device device = _deviceRepository.GetDeviceByUuid(uuid);
-            if (device == null)
-            {
-                _logger.LogWarning("Device with UUID '{uuid}' not found.", uuid);
-                return false;
-            }
-
-            try
-            {
-                using TcpClient client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort);
-
-                using NetworkStream networkStream = client.GetStream();
-                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
-
-                await sslStream.AuthenticateAsClientAsync(
-                    device.IPAddress,
-                    new X509CertificateCollection { _clientCertificate },
-                    System.Security.Authentication.SslProtocols.Tls13,
-                    checkCertificateRevocation: false);
-
-                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
-
-                // Directly send the license
-                await SendMessageAsync(sslStream, $"LICENSE:{license}\n").ConfigureAwait(false);
-                _logger.LogInformation("License sent to device UUID: {uuid}", uuid);
-                return true;
-
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send license to device UUID: {uuid}", uuid);
-                return false;
             }
         }
 
@@ -751,6 +753,197 @@ namespace UpFlux.Gateway.Server.Services
             string[] acceptableIssuers)
         {
             return _clientCertificate;
+        }
+
+        /// <summary>
+        /// Validates the license for a device with the specified UUID.
+        /// </summary>
+        /// <param name="uuid">The device UUID.</param>
+        /// <returns>A task representing the validation operation, with a boolean result indicating if the license is valid.</returns>
+        public async Task<bool> ValidateLicenseAsync(string uuid)
+        {
+            _logger.LogInformation("Validating license for device UUID: {uuid}", uuid);
+
+            Device device = _deviceRepository.GetDeviceByUuid(uuid);
+
+            if (device == null)
+            {
+                _logger.LogInformation("Device UUID: {uuid} not found. Initiating registration.", uuid);
+                await RegisterDeviceAsync(uuid);
+            }
+            else if (device.LicenseExpiration <= DateTime.UtcNow)
+            {
+                _logger.LogInformation("License for device UUID: {uuid} is expired or nearing expiration. Initiating renewal.", uuid);
+                await RenewLicenseAsync(device);
+            }
+            else
+            {
+                _logger.LogInformation("Device UUID: {uuid} has a valid license.", uuid);
+                return true;
+            }
+
+            // Refresh device info
+            device = _deviceRepository.GetDeviceByUuid(uuid);
+
+            // Return the license validity status
+            return device.LicenseExpiration > DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Registers a new device by communicating with the cloud.
+        /// </summary>
+        /// <param name="uuid">The device UUID.</param>
+        /// <returns>A task representing the registration operation.</returns>
+        private async Task RegisterDeviceAsync(string uuid)
+        {
+            try
+            {
+                DeviceRegistrationResponse licenseResponse = await _cloudCommunicationService.RegisterDeviceAsync(uuid);
+
+                if (licenseResponse.Approved)
+                {
+                    Device device = new Device
+                    {
+                        UUID = uuid,
+                        License = licenseResponse.License,
+                        LicenseExpiration = licenseResponse.ExpirationDate.ToDateTime()
+                    };
+
+                    _deviceRepository.AddOrUpdateDevice(device);
+
+                    _logger.LogInformation("Device UUID: {uuid} registered successfully.", uuid);
+
+                    // Send license to the device
+                    bool success = await SendLicenseToDeviceAsync(uuid, licenseResponse.License);
+                    if (!success)
+                    {
+                        _logger.LogWarning("Failed to push license to device {uuid}.", uuid);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Device UUID: {uuid} registration was not approved by the cloud.", uuid);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while registering device UUID: {uuid}", uuid);
+            }
+        }
+
+        /// <summary>
+        /// Renews the license for an existing device.
+        /// </summary>
+        /// <param name="device">The device whose license needs renewal.</param>
+        /// <returns>A task representing the renewal operation.</returns>
+        private async Task RenewLicenseAsync(Device device)
+        {
+            try
+            {
+                LicenseRenewalResponse renewalResponse = await _cloudCommunicationService.RenewLicenseAsync(device.UUID);
+
+                if (renewalResponse.Approved)
+                {
+                    device.License = renewalResponse.License;
+                    device.LicenseExpiration = renewalResponse.ExpirationDate.ToDateTime();
+
+                    _deviceRepository.AddOrUpdateDevice(device);
+
+                    _logger.LogInformation("License for device UUID: {uuid} renewed successfully.", device.UUID);
+
+                    // Send updated license to the device
+                    bool success = await SendLicenseToDeviceAsync(device.UUID, renewalResponse.License);
+                    if (!success)
+                    {
+                        _logger.LogWarning("Failed to push renewed license to device {uuid}.", device.UUID);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("License renewal for device UUID: {uuid} was not approved by the cloud.", device.UUID);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while renewing license for device UUID: {uuid}", device.UUID);
+            }
+        }
+
+        /// <summary>
+        /// Schedules periodic license checks and renewals.
+        /// </summary>
+        /// <param name="stoppingToken">Token to signal cancellation.</param>
+        /// <returns>A task representing the scheduled operation.</returns>
+        public async Task ScheduleLicenseRenewalsAsync(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("Starting scheduled license renewals.");
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    List<Device> devices = _deviceRepository.GetAllDevices();
+
+                    foreach (Device device in devices)
+                    {
+                        // Check if the license is expiring within the next day
+                        if (device.LicenseExpiration <= DateTime.UtcNow.AddDays(1))
+                        {
+                            _logger.LogInformation("License for device UUID: {uuid} is nearing expiration.", device.UUID);
+                            await RenewLicenseAsync(device);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "An error occurred during scheduled license renewals.");
+                }
+
+                await Task.Delay(TimeSpan.FromMinutes(_settings.LicenseCheckIntervalMinutes), stoppingToken);
+            }
+
+            _logger.LogInformation("Scheduled license renewals are stopping.");
+        }
+
+        /// <summary>
+        /// Sends a license to a device by connecting as a client.
+        /// </summary>
+        public async Task<bool> SendLicenseToDeviceAsync(string uuid, string license)
+        {
+            Device device = _deviceRepository.GetDeviceByUuid(uuid);
+            if (device == null)
+            {
+                _logger.LogWarning("Device with UUID '{uuid}' not found.", uuid);
+                return false;
+            }
+
+            try
+            {
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Parse(device.IPAddress), _settings.DeviceTcpPort);
+
+                using NetworkStream networkStream = client.GetStream();
+                using SslStream sslStream = new SslStream(networkStream, false, ValidateDeviceCertificate, SelectLocalCertificate);
+
+                await sslStream.AuthenticateAsClientAsync(
+                    device.IPAddress,
+                    new X509CertificateCollection { _clientCertificate },
+                    System.Security.Authentication.SslProtocols.Tls13,
+                    checkCertificateRevocation: false);
+
+                _logger.LogInformation("TLS handshake completed with device at IP: {ipAddress}", device.IPAddress);
+
+                // Directly send the license
+                await SendMessageAsync(sslStream, $"LICENSE:{license}\n").ConfigureAwait(false);
+                _logger.LogInformation("License sent to device UUID: {uuid}", uuid);
+                return true;
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send license to device UUID: {uuid}", uuid);
+                return false;
+            }
         }
     }
 }

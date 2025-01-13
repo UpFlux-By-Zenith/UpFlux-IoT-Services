@@ -56,8 +56,8 @@ namespace UpFlux.Gateway.Server
                         services.AddSingleton<CloudCommunicationService>();
                         services.AddSingleton<AlertingService>();
                         services.AddSingleton<DeviceCommunicationService>();
-                        services.AddSingleton<ILicensePusher, LicensePusher>();
-                        services.AddSingleton<LicenseValidationService>();
+                        //services.AddSingleton<ILicensePusher, LicensePusher>();
+                        //services.AddSingleton<LicenseValidationService>();
                         services.AddSingleton<DataAggregationService>();
                         services.AddSingleton<UpdateManagementService>();
                         services.AddSingleton<LogCollectionService>();
