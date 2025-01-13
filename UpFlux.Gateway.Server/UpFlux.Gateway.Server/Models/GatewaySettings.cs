@@ -62,6 +62,11 @@ namespace UpFlux.Gateway.Server.Models
         public int GatewayTcpPort { get; set; } = 5000;
 
         /// <summary>
+        /// Gets or sets the gRPC port on which the Gateway Server listens for grpc connections with the cloud.
+        /// </summary>
+        public int GatewayGrpcPort { get; set; } = 5001;
+
+        /// <summary>
         /// Gets or sets the TCP port on which the device listens for Gateway connections.
         /// </summary>
         public int DeviceTcpPort { get; set; } = 6000;

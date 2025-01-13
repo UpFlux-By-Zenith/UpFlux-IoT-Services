@@ -183,6 +183,13 @@ namespace UpFlux.Monitoring.Service
                     {
                         _logger.LogInformation("Connection established with the server.");
 
+                        // Send UUID to identify the device
+                        string uuidMessage = $"UUID:{_settings.DeviceUuid}\n";
+                        byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+                        networkStream.Write(uuidBytes, 0, uuidBytes.Length);
+                        networkStream.Flush();
+                        _logger.LogInformation("Device UUID sent to server: {uuid}", _settings.DeviceUuid);
+
                         // Send License Renewal Request Command
                         string command = "RENEW_LICENSE\n";
                         byte[] commandBytes = Encoding.UTF8.GetBytes(command);

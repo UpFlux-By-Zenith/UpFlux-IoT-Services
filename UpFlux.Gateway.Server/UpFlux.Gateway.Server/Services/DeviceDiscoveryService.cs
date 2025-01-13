@@ -115,7 +115,7 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogInformation("New device detected at IP: {ip}", ip);
 
                     // Attempt to establish a secure connection
-                    await _deviceCommunicationService.InitiateSecureConnectionAsync(ip);
+                    await _deviceCommunicationService.InitiateConnectionAsync(ip);
 
                     // Add to known devices (Placeholder device object)
                     Device device = new Device { IPAddress = ip };

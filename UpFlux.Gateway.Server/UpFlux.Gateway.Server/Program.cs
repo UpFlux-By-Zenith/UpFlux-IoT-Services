@@ -40,6 +40,9 @@ namespace UpFlux.Gateway.Server
             {
                 Log.Information("Starting UpFlux Gateway Server...");
 
+                // Retrieve GatewayGrpcPort from configuration
+                var gatewayGrpcPort = configuration.GetSection("GatewaySettings").GetValue<int>("GatewayGrpcPort");
+
                 // 3. Create and configure the Host
                 IHost host = Host.CreateDefaultBuilder(args)
                     .UseSystemd()
@@ -56,8 +59,6 @@ namespace UpFlux.Gateway.Server
                         services.AddSingleton<CloudCommunicationService>();
                         services.AddSingleton<AlertingService>();
                         services.AddSingleton<DeviceCommunicationService>();
-                        //services.AddSingleton<ILicensePusher, LicensePusher>();
-                        //services.AddSingleton<LicenseValidationService>();
                         services.AddSingleton<DataAggregationService>();
                         services.AddSingleton<UpdateManagementService>();
                         services.AddSingleton<LogCollectionService>();
@@ -74,13 +75,9 @@ namespace UpFlux.Gateway.Server
                         // Kestrel server on port 5001 with TLS
                         webBuilder.ConfigureKestrel(serverOptions =>
                         {
-                            serverOptions.ListenAnyIP(5001, listenOptions =>
+                            serverOptions.ListenAnyIP(gatewayGrpcPort, listenOptions =>
                             {
                                 listenOptions.Protocols = HttpProtocols.Http2;
-                                // Enable TLS with the certificate from appsettings
-                                string certPath = configuration["GatewaySettings:CertificatePath"];
-                                string certPassword = configuration["GatewaySettings:CertificatePassword"];
-                                listenOptions.UseHttps(certPath, certPassword);
                             });
                         });
                         webBuilder.UseStartup<Startup>();
