@@ -41,14 +41,6 @@ namespace UpFlux.Update.Service.Models
         public string PackageNamePattern { get; set; }
 
         [Required]
-        public string CertificatePath { get; set; }
-
-        public string CertificatePassword { get; set; }
-
-        [Required]
-        public string TrustedCaCertificatePath { get; set; }
-
-        [Required]
         public string DeviceUuid { get; set; }
 
         [Required]
