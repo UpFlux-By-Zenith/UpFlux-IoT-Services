@@ -65,16 +65,23 @@ namespace UpFlux.Cloud.Simulator
         private GrpcChannel CreateGatewayChannel()
         {
             // Build channel for connecting to the Gateway
-            HttpClientHandler httpHandler = new HttpClientHandler();
-            if (_cloudSettings.SkipServerCertificateValidation)
-            {
-                httpHandler.ServerCertificateCustomValidationCallback =
-                    (req, cert, chain, errors) => true;
-            }
+            //HttpClientHandler httpHandler = new HttpClientHandler();
+            //if (_cloudSettings.SkipServerCertificateValidation)
+            //{
+            //    httpHandler.ServerCertificateCustomValidationCallback =
+            //        (req, cert, chain, errors) => true;
+            //}
 
+            //GrpcChannel channel = GrpcChannel.ForAddress(
+            //    _cloudSettings.GatewayAddress,
+            //    new Grpc.Net.Client.GrpcChannelOptions { HttpHandler = httpHandler });
+
+            // Use HTTP for the gateway address
             GrpcChannel channel = GrpcChannel.ForAddress(
                 _cloudSettings.GatewayAddress,
-                new Grpc.Net.Client.GrpcChannelOptions { HttpHandler = httpHandler });
+                new GrpcChannelOptions()
+            );
+
             return channel;
         }
 
