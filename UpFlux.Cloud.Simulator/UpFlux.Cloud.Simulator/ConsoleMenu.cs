@@ -24,15 +24,15 @@ namespace UpFlux.Cloud.Simulator
         {
             while (true)
             {
-                Console.WriteLine("\n--- UpFlux Cloud Simulator Menu (calls Gateway) ---");
-                Console.WriteLine("1) Send ROLLBACK command to device(s)");
-                Console.WriteLine("2) Request logs from device(s)");
-                Console.WriteLine("3) Send update package to device(s)");
-                Console.WriteLine("4) Request version info from device(s)");
-                Console.WriteLine("5) Exit");
-                Console.Write("Choose: ");
-                char key = Console.ReadKey(intercept: true).KeyChar;
-                Console.WriteLine();
+                ConsoleSync.WriteLine("\n--- UpFlux Cloud Simulator Menu (calls Gateway) ---");
+                ConsoleSync.WriteLine("1) Send ROLLBACK command to device(s)");
+                ConsoleSync.WriteLine("2) Request logs from device(s)");
+                ConsoleSync.WriteLine("3) Send update package to device(s)");
+                ConsoleSync.WriteLine("4) Request version info from device(s)");
+                ConsoleSync.WriteLine("5) Exit");
+                ConsoleSync.Write("Choose: ");
+                char key = ConsoleSync.ReadKey();
+                ConsoleSync.WriteLine("");
 
                 if (key == '1')
                 {
@@ -52,12 +52,12 @@ namespace UpFlux.Cloud.Simulator
                 }
                 else if (key == '5')
                 {
-                    Console.WriteLine("Exiting menu...");
+                    ConsoleSync.WriteLine("Exiting menu...");
                     break;
                 }
                 else
                 {
-                    Console.WriteLine("Invalid choice. Try again.");
+                    ConsoleSync.WriteLine("Invalid choice. Try again.");
                 }
             }
         }
@@ -87,12 +87,12 @@ namespace UpFlux.Cloud.Simulator
 
         private async Task MenuSendRollback()
         {
-            Console.Write("Enter device UUID(s), comma-separated: ");
-            string line = Console.ReadLine() ?? "";
+            ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
+            string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-            Console.Write("Enter rollback parameter (e.g. version=1.2.3): ");
-            string param = Console.ReadLine() ?? "version=1.0.0";
+            ConsoleSync.Write("Enter rollback parameter (e.g. version=1.2.3): ");
+            string param = ConsoleSync.ReadLine() ?? "version=1.0.0";
 
             using GrpcChannel channel = CreateGatewayChannel();
             CommandService.CommandServiceClient commandClient = new CommandService.CommandServiceClient(channel);
@@ -105,15 +105,15 @@ namespace UpFlux.Cloud.Simulator
             };
             request.TargetDevices.AddRange(uuids);
 
-            Console.WriteLine($"Sending rollback command to the Gateway for {uuids.Length} device(s)...");
+            ConsoleSync.WriteLine($"Sending rollback command to the Gateway for {uuids.Length} device(s)...");
             await commandClient.SendCommandAsync(request);
-            Console.WriteLine("Rollback command sent.");
+            ConsoleSync.WriteLine("Rollback command sent.");
         }
 
         private async Task MenuRequestLogs()
         {
-            Console.Write("Enter device UUID(s), comma-separated: ");
-            string line = Console.ReadLine() ?? "";
+            ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
+            string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
             using GrpcChannel channel = CreateGatewayChannel();
@@ -122,28 +122,28 @@ namespace UpFlux.Cloud.Simulator
             LogRequest request = new LogRequest();
             request.DeviceUuids.AddRange(uuids);
 
-            Console.WriteLine("Requesting logs from the Gateway...");
+            ConsoleSync.WriteLine("Requesting logs from the Gateway...");
             LogResponse response = await logReqClient.RequestDeviceLogsAsync(request);
-            Console.WriteLine($"LogRequest result => success={response.Success}, message={response.Message}");
+            ConsoleSync.WriteLine($"LogRequest result => success={response.Success}, message={response.Message}");
         }
 
         private async Task MenuSendUpdate()
         {
-            Console.Write("Enter device UUID(s), comma-separated: ");
-            string line = Console.ReadLine() ?? "";
+            ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
+            string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-            Console.Write("Path to .deb package: ");
-            string packagePath = Console.ReadLine() ?? "";
+            ConsoleSync.Write("Path to .deb package: ");
+            string packagePath = ConsoleSync.ReadLine() ?? "";
             if (!File.Exists(packagePath))
             {
-                Console.WriteLine("File not found. Aborting.");
+                ConsoleSync.WriteLine("File not found. Aborting.");
                 return;
             }
             string fileName = Path.GetFileName(packagePath);
 
-            Console.Write("Enter version for this update: ");
-            string version = Console.ReadLine() ?? "1.0.0";
+            ConsoleSync.Write("Enter version for this update: ");
+            string version = ConsoleSync.ReadLine() ?? "1.0.0";
 
             string packageId = Guid.NewGuid().ToString();
 
@@ -166,9 +166,9 @@ namespace UpFlux.Cloud.Simulator
             };
             request.TargetDevices.AddRange(uuids);
 
-            Console.WriteLine($"Sending update package {packageId} to Gateway for {uuids.Length} device(s)...");
+            ConsoleSync.WriteLine($"Sending update package {packageId} to Gateway for {uuids.Length} device(s)...");
             await updateClient.SendUpdatePackageAsync(request);
-            Console.WriteLine("Update package sent.");
+            ConsoleSync.WriteLine("Update package sent.");
         }
 
         private async Task MenuRequestVersionData()
@@ -177,18 +177,18 @@ namespace UpFlux.Cloud.Simulator
             using GrpcChannel channel = CreateGatewayChannel();
             VersionDataService.VersionDataServiceClient versionClient = new VersionDataService.VersionDataServiceClient(channel);
 
-            Console.WriteLine("Requesting version data from Gateway...");
+            ConsoleSync.WriteLine("Requesting version data from Gateway...");
 
             VersionDataRequest request = new VersionDataRequest();
             VersionDataResponse resp = await versionClient.RequestVersionDataAsync(request);
 
-            Console.WriteLine($"Result => success={resp.Success}, message={resp.Message}");
+            ConsoleSync.WriteLine($"Result => success={resp.Success}, message={resp.Message}");
             foreach (DeviceVersions? devVers in resp.DeviceVersionsList)
             {
-                Console.WriteLine($" Device={devVers.DeviceUuid}");
+                ConsoleSync.WriteLine($" Device={devVers.DeviceUuid}");
                 foreach (Gateway.Server.Protos.VersionInfo? ver in devVers.Versions)
                 {
-                    Console.WriteLine($"   Version={ver.Version}, InstalledAt={ver.InstalledAt}");
+                    ConsoleSync.WriteLine($"   Version={ver.Version}, InstalledAt={ver.InstalledAt}");
                 }
             }
         }
