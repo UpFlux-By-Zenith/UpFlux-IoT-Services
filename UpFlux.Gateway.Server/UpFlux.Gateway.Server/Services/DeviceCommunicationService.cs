@@ -155,7 +155,7 @@ namespace UpFlux.Gateway.Server.Services
                     return;
                 }
 
-                string uuid = uuidMessage;
+                string uuid = uuidMessage.Replace("UUID:", "").Trim();
                 _logger.LogInformation("Received UUID '{uuid}' from device at {remoteEndPoint}", uuid, remoteEndPoint);
 
                 Device device = _deviceRepository.GetDeviceByUuid(uuid) ?? new Device
@@ -198,7 +198,7 @@ namespace UpFlux.Gateway.Server.Services
         {
             await SendMessageAsync(networkStream, "REQUEST_UUID\n").ConfigureAwait(false);
             string response = await ReadMessageAsync(networkStream).ConfigureAwait(false);
-            return response.Replace("UUID:", "").Trim();
+            return response;
         }
 
         /// <summary>

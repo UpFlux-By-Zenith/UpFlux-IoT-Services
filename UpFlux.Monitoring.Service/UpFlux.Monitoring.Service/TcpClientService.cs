@@ -51,6 +51,9 @@ namespace UpFlux.Monitoring.Service
                 await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
                 await networkStream.FlushAsync();
 
+                // Wait for a short time before sending monitoring data so that the server can process the UUID
+                await Task.Delay(100);
+
                 // Send monitoring data
                 string message = $"MONITORING_DATA:{data}\n";
                 byte[] messageBytes = Encoding.UTF8.GetBytes(message);
