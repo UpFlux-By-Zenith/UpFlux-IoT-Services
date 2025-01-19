@@ -191,21 +191,22 @@ namespace UpFlux.Monitoring.Service
                         _logger.LogInformation("Device UUID sent to server: {uuid}", _settings.DeviceUuid);
 
                         // Send License Renewal Request Command
-                        string command = "RENEW_LICENSE\n";
-                        byte[] commandBytes = Encoding.UTF8.GetBytes(command);
-                        networkStream.Write(commandBytes, 0, commandBytes.Length);
-                        networkStream.Flush();
+                        //string command = "RENEW_LICENSE\n";
+                        //byte[] commandBytes = Encoding.UTF8.GetBytes(command);
+                        //networkStream.Write(commandBytes, 0, commandBytes.Length);
+                        //networkStream.Flush();
 
                         _logger.LogInformation("License renewal request sent to server.");
 
                         // Receive updated License from Server
-                        string license = ReadMessage(networkStream);
-                        if (!string.IsNullOrEmpty(license))
+                        string message = ReadMessage(networkStream);
+                        if (!string.IsNullOrEmpty(message) && message.StartsWith("LICENSE:"))
                         {
                             _logger.LogInformation("Updated license received from server.");
 
                             // Store license securely
-                            StoreLicense(license);
+                            string licenseXml = message.Substring("LICENSE:".Length).Trim();
+                            StoreLicense(licenseXml);
                         }
                         else
                         {

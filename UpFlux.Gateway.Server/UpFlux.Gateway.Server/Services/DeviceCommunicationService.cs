@@ -128,10 +128,10 @@ namespace UpFlux.Gateway.Server.Services
                 using NetworkStream networkStream = client.GetStream();
 
                 // Send a simple handshake message
-                string handshakeMessage = "HANDSHAKE\n";
-                byte[] messageBytes = Encoding.UTF8.GetBytes(handshakeMessage);
-                await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                await networkStream.FlushAsync();
+                //string handshakeMessage = "HANDSHAKE\n";
+                //byte[] messageBytes = Encoding.UTF8.GetBytes(handshakeMessage);
+                //await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                //await networkStream.FlushAsync();
 
                 _logger.LogInformation("Connection established with device at IP: {ipAddress}. Handshake successful.", ipAddress);
             }
@@ -587,6 +587,35 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         /// <param name="uuid">The device UUID.</param>
         /// <returns>A task representing the validation operation, with a boolean result indicating if the license is valid.</returns>
+        //public async Task<bool> ValidateLicenseAsync(string uuid)
+        //{
+        //    _logger.LogInformation("Validating license for device UUID: {uuid}", uuid);
+
+        //    Device device = _deviceRepository.GetDeviceByUuid(uuid);
+
+        //    if (device == null)
+        //    {
+        //        _logger.LogInformation("Device UUID: {uuid} not found. Initiating registration.", uuid);
+        //        await RegisterDeviceAsync(uuid);
+        //    }
+        //    else if (device.LicenseExpiration <= DateTime.UtcNow)
+        //    {
+        //        _logger.LogInformation("License for device UUID: {uuid} is expired or nearing expiration. Initiating renewal.", uuid);
+        //        await RenewLicenseAsync(device);
+        //    }
+        //    else
+        //    {
+        //        _logger.LogInformation("Device UUID: {uuid} has a valid license.", uuid);
+        //        return true;
+        //    }
+
+        //    // Refresh device info
+        //    device = _deviceRepository.GetDeviceByUuid(uuid);
+
+        //    // Return the license validity status
+        //    return device.LicenseExpiration > DateTime.UtcNow;
+        //}
+
         public async Task<bool> ValidateLicenseAsync(string uuid)
         {
             _logger.LogInformation("Validating license for device UUID: {uuid}", uuid);
@@ -598,21 +627,29 @@ namespace UpFlux.Gateway.Server.Services
                 _logger.LogInformation("Device UUID: {uuid} not found. Initiating registration.", uuid);
                 await RegisterDeviceAsync(uuid);
             }
-            else if (device.LicenseExpiration <= DateTime.UtcNow)
-            {
-                _logger.LogInformation("License for device UUID: {uuid} is expired or nearing expiration. Initiating renewal.", uuid);
-                await RenewLicenseAsync(device);
-            }
             else
             {
-                _logger.LogInformation("Device UUID: {uuid} has a valid license.", uuid);
-                return true;
+                if (device.LicenseExpiration > DateTime.UtcNow)
+                {
+                    _logger.LogInformation("Device UUID: {uuid} has a valid license.", uuid);
+                    return true;
+                }
+
+                if (device.NextEarliestRenewalAttempt.HasValue
+                    && device.NextEarliestRenewalAttempt.Value > DateTime.UtcNow)
+                {
+                    _logger.LogWarning(
+                        "License for device {uuid} is expired, but next renewal attempt is after {time}. Skipping renewal.",
+                        uuid, device.NextEarliestRenewalAttempt.Value
+                    );
+                    return false;
+                }
+
+                _logger.LogInformation("License for device UUID: {uuid} is expired. Initiating renewal now.", uuid);
+                await RenewLicenseAsync(device);
             }
 
-            // Refresh device info
             device = _deviceRepository.GetDeviceByUuid(uuid);
-
-            // Return the license validity status
             return device.LicenseExpiration > DateTime.UtcNow;
         }
 
@@ -673,6 +710,7 @@ namespace UpFlux.Gateway.Server.Services
                 {
                     device.License = renewalResponse.License;
                     device.LicenseExpiration = renewalResponse.ExpirationDate.ToDateTime();
+                    device.NextEarliestRenewalAttempt = null; // reseting because we have a valid license
 
                     _deviceRepository.AddOrUpdateDevice(device);
 
@@ -688,11 +726,17 @@ namespace UpFlux.Gateway.Server.Services
                 else
                 {
                     _logger.LogWarning("License renewal for device UUID: {uuid} was not approved by the cloud.", device.UUID);
+                    // Wait 30 minutes before next attempt
+                    device.NextEarliestRenewalAttempt = DateTime.UtcNow.AddMinutes(30);
+                    _deviceRepository.AddOrUpdateDevice(device);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while renewing license for device UUID: {uuid}", device.UUID);
+                // Also wait 30 minutes before next attempt
+                device.NextEarliestRenewalAttempt = DateTime.UtcNow.AddMinutes(30);
+                _deviceRepository.AddOrUpdateDevice(device);
             }
         }
 

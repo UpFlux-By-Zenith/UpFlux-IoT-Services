@@ -36,5 +36,7 @@ namespace UpFlux.Gateway.Server.Models
         /// Gets or sets the registration status of the device (e.g., Pending, Registered).
         /// </summary>
         public string RegistrationStatus { get; set; }
+
+        public DateTime? NextEarliestRenewalAttempt { get; set; }
     }
 }
