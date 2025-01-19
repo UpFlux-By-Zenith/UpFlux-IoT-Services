@@ -127,12 +127,6 @@ namespace UpFlux.Gateway.Server.Services
 
                 using NetworkStream networkStream = client.GetStream();
 
-                // Send a simple handshake message
-                //string handshakeMessage = "HANDSHAKE\n";
-                //byte[] messageBytes = Encoding.UTF8.GetBytes(handshakeMessage);
-                //await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                //await networkStream.FlushAsync();
-
                 _logger.LogInformation("Connection established with device at IP: {ipAddress}. Handshake successful.", ipAddress);
             }
             catch (Exception ex)
@@ -515,8 +509,10 @@ namespace UpFlux.Gateway.Server.Services
 
                 using NetworkStream networkStream = client.GetStream();
 
+                // Send "REQUEST_LOGS" command
                 await SendMessageAsync(networkStream, "REQUEST_LOGS\n").ConfigureAwait(false);
 
+                // Read the fileCount (4 bytes)
                 byte[] fileCountBytes = new byte[4];
                 int bytesRead = await networkStream.ReadAsync(fileCountBytes, 0, 4).ConfigureAwait(false);
                 if (bytesRead < 4)
@@ -525,43 +521,61 @@ namespace UpFlux.Gateway.Server.Services
                 }
 
                 int fileCount = BitConverter.ToInt32(fileCountBytes, 0);
+
+                // if the device has zero log files, skip the rest
+                if (fileCount == 0)
+                {
+                    _logger.LogInformation("Device {uuid} returned no logs.", deviceUuid);
+                    return Array.Empty<string>();
+                }
+
+                _logger.LogInformation("Device {uuid} is sending {count} log file(s).", deviceUuid, fileCount);
+
                 List<string> receivedLogFiles = new List<string>();
 
                 for (int i = 0; i < fileCount; i++)
                 {
+                    // Read 4 bytes fileNameLength
                     byte[] fileNameLengthBytes = new byte[4];
                     bytesRead = await networkStream.ReadAsync(fileNameLengthBytes, 0, 4).ConfigureAwait(false);
                     if (bytesRead < 4)
                     {
                         throw new Exception("Failed to read the file name length.");
                     }
-
                     int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
 
+                    // Read fileNameLength bytes fileName
                     byte[] fileNameBytes = new byte[fileNameLength];
                     bytesRead = await networkStream.ReadAsync(fileNameBytes, 0, fileNameLength).ConfigureAwait(false);
                     if (bytesRead < fileNameLength)
                     {
                         throw new Exception("Failed to read the file name.");
                     }
-
                     string fileName = Encoding.UTF8.GetString(fileNameBytes);
 
+                    // Read 4 bytes logDataLength
                     byte[] lengthBytes = new byte[4];
                     bytesRead = await networkStream.ReadAsync(lengthBytes, 0, 4).ConfigureAwait(false);
                     if (bytesRead < 4)
                     {
                         throw new Exception("Failed to read the log file length.");
                     }
-
                     int logDataLength = BitConverter.ToInt32(lengthBytes, 0);
-                    _logger.LogInformation("Receiving log file '{fileName}' of size {length} bytes from device {uuid}.", fileName, logDataLength, deviceUuid);
 
+                    _logger.LogInformation(
+                        "Receiving log file '{fileName}' of size {length} bytes from device {uuid}.",
+                        fileName, logDataLength, deviceUuid
+                    );
+
+                    // Read the logData
                     byte[] logData = new byte[logDataLength];
                     int totalBytesRead = 0;
                     while (totalBytesRead < logDataLength)
                     {
-                        bytesRead = await networkStream.ReadAsync(logData, totalBytesRead, logDataLength - totalBytesRead).ConfigureAwait(false);
+                        bytesRead = await networkStream.ReadAsync(
+                            logData, totalBytesRead, logDataLength - totalBytesRead
+                        ).ConfigureAwait(false);
+
                         if (bytesRead == 0)
                         {
                             throw new Exception("Device closed the connection unexpectedly while sending logs.");
@@ -569,17 +583,23 @@ namespace UpFlux.Gateway.Server.Services
                         totalBytesRead += bytesRead;
                     }
 
+                    // ave to local file
                     string logsDirectory = Path.Combine(_settings.LogsDirectory, "DeviceLogs");
                     Directory.CreateDirectory(logsDirectory);
-                    string logFilePath = Path.Combine(logsDirectory, $"{deviceUuid}_{DateTime.UtcNow:yyyyMMddHHmmss}_{fileName}");
+                    string logFilePath = Path.Combine(
+                        logsDirectory,
+                        $"{deviceUuid}_{DateTime.UtcNow:yyyyMMddHHmmss}_{fileName}"
+                    );
 
                     await File.WriteAllBytesAsync(logFilePath, logData).ConfigureAwait(false);
 
-                    _logger.LogInformation("Log file '{fileName}' received from device {uuid} and saved to {path}.", fileName, deviceUuid, logFilePath);
+                    _logger.LogInformation(
+                        "Log file '{fileName}' received from device {uuid} and saved to {path}.",
+                        fileName, deviceUuid, logFilePath
+                    );
 
                     receivedLogFiles.Add(logFilePath);
                 }
-
                 return receivedLogFiles.ToArray();
             }
             catch (Exception ex)
@@ -588,40 +608,6 @@ namespace UpFlux.Gateway.Server.Services
                 return null;
             }
         }
-
-        /// <summary>
-        /// Validates the license for a device with the specified UUID.
-        /// </summary>
-        /// <param name="uuid">The device UUID.</param>
-        /// <returns>A task representing the validation operation, with a boolean result indicating if the license is valid.</returns>
-        //public async Task<bool> ValidateLicenseAsync(string uuid)
-        //{
-        //    _logger.LogInformation("Validating license for device UUID: {uuid}", uuid);
-
-        //    Device device = _deviceRepository.GetDeviceByUuid(uuid);
-
-        //    if (device == null)
-        //    {
-        //        _logger.LogInformation("Device UUID: {uuid} not found. Initiating registration.", uuid);
-        //        await RegisterDeviceAsync(uuid);
-        //    }
-        //    else if (device.LicenseExpiration <= DateTime.UtcNow)
-        //    {
-        //        _logger.LogInformation("License for device UUID: {uuid} is expired or nearing expiration. Initiating renewal.", uuid);
-        //        await RenewLicenseAsync(device);
-        //    }
-        //    else
-        //    {
-        //        _logger.LogInformation("Device UUID: {uuid} has a valid license.", uuid);
-        //        return true;
-        //    }
-
-        //    // Refresh device info
-        //    device = _deviceRepository.GetDeviceByUuid(uuid);
-
-        //    // Return the license validity status
-        //    return device.LicenseExpiration > DateTime.UtcNow;
-        //}
 
         public async Task<bool> ValidateLicenseAsync(string uuid)
         {

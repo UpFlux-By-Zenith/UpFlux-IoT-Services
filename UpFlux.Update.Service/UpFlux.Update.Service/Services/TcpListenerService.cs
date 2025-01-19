@@ -306,9 +306,17 @@ namespace UpFlux.Update.Service.Services
                 }
 
                 // Send the number of log files
-                byte[] fileCountBytes = BitConverter.GetBytes(logsToSend.Count);
+                // Always send fileCount
+                int fileCount = logsToSend.Count;
+                byte[] fileCountBytes = BitConverter.GetBytes(fileCount);
                 await networkStream.WriteAsync(fileCountBytes, 0, fileCountBytes.Length);
                 await networkStream.FlushAsync();
+
+                if (fileCount == 0)
+                {
+                    _logger.LogInformation("No logs to send, sent fileCount=0 to Gateway.");
+                    return;
+                }
 
                 foreach (var log in logsToSend)
                 {
@@ -317,7 +325,7 @@ namespace UpFlux.Update.Service.Services
                     byte[] fileNameLengthBytes = BitConverter.GetBytes(fileNameBytes.Length);
                     await networkStream.WriteAsync(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
                     await networkStream.WriteAsync(fileNameBytes, 0, fileNameBytes.Length);
-                    await networkStream.FlushAsync();
+                    //await networkStream.FlushAsync();
 
                     // Read the file data
                     byte[] logBytes = File.ReadAllBytes(log.FilePath);
@@ -326,7 +334,7 @@ namespace UpFlux.Update.Service.Services
                     // Send the length of the log file (as 4-byte integer)
                     byte[] lengthBytes = BitConverter.GetBytes(logLength);
                     await networkStream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
-                    await networkStream.FlushAsync();
+                    //await networkStream.FlushAsync();
 
                     // Send the log file data
                     await networkStream.WriteAsync(logBytes, 0, logBytes.Length);
