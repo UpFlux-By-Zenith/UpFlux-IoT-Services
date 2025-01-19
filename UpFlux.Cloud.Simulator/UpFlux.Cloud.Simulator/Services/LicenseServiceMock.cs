@@ -20,7 +20,7 @@ namespace UpFlux.Cloud.Simulator
             _logger.LogInformation("CloudSim: RegisterDevice called for UUID={0}", request.Uuid);
 
             ConsoleSync.WriteLine($"\n[LicenseService] RegisterDevice for {request.Uuid}. Approve? (y/n)");
-            char key = Console.ReadKey(intercept: true).KeyChar;
+            char key = ConsoleSync.ReadKey();
             ConsoleSync.WriteLine("");
             bool approved = (key == 'y' || key == 'Y');
 
@@ -45,7 +45,8 @@ namespace UpFlux.Cloud.Simulator
             _logger.LogInformation("CloudSim: RenewLicense called for UUID={0}", request.Uuid);
 
             ConsoleSync.WriteLine($"\n[LicenseService] RenewLicense for {request.Uuid}. Approve? (y/n)");
-            char key = Console.ReadKey(intercept: true).KeyChar;
+            //char key = Console.ReadKey(intercept: true).KeyChar;
+            char key = ConsoleSync.ReadKey();
             ConsoleSync.WriteLine("");
             bool approved = (key == 'y' || key == 'Y');
 

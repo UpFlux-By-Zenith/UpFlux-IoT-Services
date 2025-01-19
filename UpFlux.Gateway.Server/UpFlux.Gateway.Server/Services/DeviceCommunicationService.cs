@@ -148,7 +148,14 @@ namespace UpFlux.Gateway.Server.Services
         {
             try
             {
-                string uuid = await RequestDeviceUuidAsync(networkStream).ConfigureAwait(false);
+                string uuidMessage = await RequestDeviceUuidAsync(networkStream).ConfigureAwait(false);
+                if (!uuidMessage.StartsWith("UUID:"))
+                {
+                    _logger.LogWarning("Unexpected initial message from {remoteEndPoint}: {message}", remoteEndPoint, uuidMessage);
+                    return;
+                }
+
+                string uuid = uuidMessage;
                 _logger.LogInformation("Received UUID '{uuid}' from device at {remoteEndPoint}", uuid, remoteEndPoint);
 
                 Device device = _deviceRepository.GetDeviceByUuid(uuid) ?? new Device
@@ -635,12 +642,11 @@ namespace UpFlux.Gateway.Server.Services
                     return true;
                 }
 
-                if (device.NextEarliestRenewalAttempt.HasValue
-                    && device.NextEarliestRenewalAttempt.Value > DateTime.UtcNow)
+                if (device.NextEarliestRenewalAttempt > DateTime.UtcNow)
                 {
                     _logger.LogWarning(
                         "License for device {uuid} is expired, but next renewal attempt is after {time}. Skipping renewal.",
-                        uuid, device.NextEarliestRenewalAttempt.Value
+                        uuid, device.NextEarliestRenewalAttempt
                     );
                     return false;
                 }
@@ -710,7 +716,9 @@ namespace UpFlux.Gateway.Server.Services
                 {
                     device.License = renewalResponse.License;
                     device.LicenseExpiration = renewalResponse.ExpirationDate.ToDateTime();
-                    device.NextEarliestRenewalAttempt = null; // reseting because we have a valid license
+                    device.RegistrationStatus = "Registered";
+                    // reset the earliest renewal attempt becayse we have a new license
+                    device.NextEarliestRenewalAttempt = DateTime.UtcNow;
 
                     _deviceRepository.AddOrUpdateDevice(device);
 

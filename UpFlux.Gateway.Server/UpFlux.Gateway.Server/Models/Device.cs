@@ -37,6 +37,6 @@ namespace UpFlux.Gateway.Server.Models
         /// </summary>
         public string RegistrationStatus { get; set; }
 
-        public DateTime? NextEarliestRenewalAttempt { get; set; }
+        public DateTime NextEarliestRenewalAttempt { get; set; }
     }
 }

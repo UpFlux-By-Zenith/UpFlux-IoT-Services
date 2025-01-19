@@ -39,7 +39,7 @@ namespace UpFlux.Gateway.Server.Repositories
                     License TEXT,
                     LicenseExpiration TEXT,
                     LastSeen TEXT,
-                    RegistrationStatus TEXT
+                    RegistrationStatus TEXT,
                     NextEarliestRenewalAttempt TEXT
                 )
             ");

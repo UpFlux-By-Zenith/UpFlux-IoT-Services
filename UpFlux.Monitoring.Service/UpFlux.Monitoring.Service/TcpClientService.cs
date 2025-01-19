@@ -46,7 +46,7 @@ namespace UpFlux.Monitoring.Service
                 _logger.LogInformation("Connection established with the Gateway Server.");
 
                 // Send Device UUID to the Gateway Server
-                string uuidMessage = $"{_settings.DeviceUuid}\n";
+                string uuidMessage = $"UUID:{_settings.DeviceUuid}\n";
                 byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
                 await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
                 await networkStream.FlushAsync();
