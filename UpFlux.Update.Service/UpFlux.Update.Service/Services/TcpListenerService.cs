@@ -68,16 +68,50 @@ namespace UpFlux.Update.Service.Services
 
                 _logger.LogInformation("Connection established with the Gateway Server.");
 
-                // Send Device UUID to the Gateway Server
-                string uuidMessage = $"UUID:{_config.DeviceUuid}\n";
-                byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
-                await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
-                await networkStream.FlushAsync();
+                //string uuidMessage = $"UUID:{_config.DeviceUuid}\n";
+                //byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+                //await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                //await networkStream.FlushAsync();
 
-                _logger.LogInformation("Device UUID sent to Gateway Server: {uuid}", _config.DeviceUuid);
+                //_logger.LogInformation("Device UUID sent to Gateway Server: {uuid}", _config.DeviceUuid);
 
-                // Receive commands from the Gateway Server
-                await ReceiveCommandsAsync(networkStream);
+                string command = await ReadMessageAsync(networkStream);
+                if (string.IsNullOrEmpty(command))
+                {
+                    _logger.LogInformation("No command received. Closing connection.");
+                    return;
+                }
+
+                _logger.LogInformation("Received command: {command}", command);
+
+                if (command.StartsWith("SEND_PACKAGE"))
+                {
+                    await ReceivePackageAsync(networkStream, command);
+                }
+                else if (command.StartsWith("LICENSE"))
+                {
+                    string license = command.Substring("LICENSE:".Length).Trim();
+                    StoreLicense(license);
+                }
+                else if (command == "REQUEST_LOGS")
+                {
+                    await SendLogsAsync(networkStream);
+                }
+                else if (command.StartsWith("ROLLBACK:"))
+                {
+                    string version = command.Substring("ROLLBACK:".Length).Trim();
+                    await HandleRollbackCommandAsync(networkStream, version);
+                }
+                else if (command == "GET_VERSIONS")
+                {
+                    await HandleGetVersionsCommandAsync(networkStream);
+                }
+                else
+                {
+                    _logger.LogWarning("Unknown command received: {command}", command);
+                }
+
+                _logger.LogInformation("Done handling {command}. Closing connection.", command);
             }
             catch (Exception ex)
             {
@@ -89,59 +123,88 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        private async Task ReceiveCommandsAsync(NetworkStream networkStream)
-        {
-            try
-            {
-                while (true)
-                {
-                    string command = await ReadMessageAsync(networkStream);
-                    if (string.IsNullOrEmpty(command))
-                    {
-                        _logger.LogInformation("No command received. Closing connection.");
-                        break;
-                    }
+        //private async Task HandleClientAsync(TcpClient client)
+        //{
+        //    try
+        //    {
+        //        using NetworkStream networkStream = client.GetStream();
 
-                    _logger.LogInformation("Received command: {command}", command);
+        //        _logger.LogInformation("Connection established with the Gateway Server.");
 
-                    if (command.StartsWith("SEND_PACKAGE"))
-                    {
-                        // Handle receiving the package
-                        await ReceivePackageAsync(networkStream, command);
-                    }
-                    else if (command.StartsWith("LICENSE"))
-                    {
-                        // Handle the license
-                        string license = command.Substring("LICENSE:".Length).Trim();
-                        StoreLicense(license);
-                    }
-                    else if (command == "REQUEST_LOGS")
-                    {
-                        // Send logs to the Gateway Server
-                        await SendLogsAsync(networkStream);
-                    }
-                    else if (command.StartsWith("ROLLBACK:"))
-                    {
-                        // Handle rollback command
-                        string version = command.Substring("ROLLBACK:".Length).Trim();
-                        await HandleRollbackCommandAsync(networkStream, version);
-                    }
-                    else if (command == "GET_VERSIONS")
-                    {
-                        // Handle GET_VERSIONS command
-                        await HandleGetVersionsCommandAsync(networkStream);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Unknown command received: {command}", command);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error receiving commands from Gateway Server.");
-            }
-        }
+        //        // Send Device UUID to the Gateway Server
+        //        string uuidMessage = $"UUID:{_config.DeviceUuid}\n";
+        //        byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+        //        await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+        //        await networkStream.FlushAsync();
+
+        //        _logger.LogInformation("Device UUID sent to Gateway Server: {uuid}", _config.DeviceUuid);
+
+        //        // Receive commands from the Gateway Server
+        //        await ReceiveCommandsAsync(networkStream);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error handling TCP client.");
+        //    }
+        //    finally
+        //    {
+        //        client.Close();
+        //    }
+        //}
+
+        //private async Task ReceiveCommandsAsync(NetworkStream networkStream)
+        //{
+        //    try
+        //    {
+        //        while (true)
+        //        {
+        //            string command = await ReadMessageAsync(networkStream);
+        //            if (string.IsNullOrEmpty(command))
+        //            {
+        //                _logger.LogInformation("No command received. Closing connection.");
+        //                break;
+        //            }
+
+        //            _logger.LogInformation("Received command: {command}", command);
+
+        //            if (command.StartsWith("SEND_PACKAGE"))
+        //            {
+        //                // Handle receiving the package
+        //                await ReceivePackageAsync(networkStream, command);
+        //            }
+        //            else if (command.StartsWith("LICENSE"))
+        //            {
+        //                // Handle the license
+        //                string license = command.Substring("LICENSE:".Length).Trim();
+        //                StoreLicense(license);
+        //            }
+        //            else if (command == "REQUEST_LOGS")
+        //            {
+        //                // Send logs to the Gateway Server
+        //                await SendLogsAsync(networkStream);
+        //            }
+        //            else if (command.StartsWith("ROLLBACK:"))
+        //            {
+        //                // Handle rollback command
+        //                string version = command.Substring("ROLLBACK:".Length).Trim();
+        //                await HandleRollbackCommandAsync(networkStream, version);
+        //            }
+        //            else if (command == "GET_VERSIONS")
+        //            {
+        //                // Handle GET_VERSIONS command
+        //                await HandleGetVersionsCommandAsync(networkStream);
+        //            }
+        //            else
+        //            {
+        //                _logger.LogWarning("Unknown command received: {command}", command);
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error receiving commands from Gateway Server.");
+        //    }
+        //}
 
         private async Task ReceivePackageAsync(NetworkStream networkStream, string command)
         {
@@ -298,7 +361,7 @@ namespace UpFlux.Update.Service.Services
                     return;
                 }
 
-                string zipName = $"upflux-logs-{DateTime.UtcNow:yyyyMMddHHmmss}.zip";
+                string zipName = $"upflux-logs.zip";
                 string zipFilePath = Path.Combine("/tmp", zipName);
 
                 // Delete the old zip incase it exists
@@ -356,7 +419,7 @@ namespace UpFlux.Update.Service.Services
                 _logger.LogInformation("Connection established with the Gateway Server for notification.");
 
                 // Send Device UUID to the Gateway Server
-                string uuidMessage = $"{_config.DeviceUuid}\n";
+                string uuidMessage = $"UUID:{_config.DeviceUuid}\n";
                 byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
                 await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
                 await networkStream.FlushAsync();
