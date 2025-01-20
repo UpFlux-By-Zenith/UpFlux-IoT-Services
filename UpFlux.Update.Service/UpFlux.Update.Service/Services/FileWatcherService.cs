@@ -34,6 +34,7 @@ namespace UpFlux.Update.Service.Services
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime
             };
             _watcher.Created += OnPackageCreated;
+            _watcher.Renamed += OnPackageCreated;
         }
 
         private void OnPackageCreated(object sender, FileSystemEventArgs e)
@@ -74,7 +75,7 @@ namespace UpFlux.Update.Service.Services
 
         private bool WaitForFile(string filePath)
         {
-            const int maxAttempts = 10;
+            const int maxAttempts = 50;
             const int delayMilliseconds = 500;
 
             for (int i = 0; i < maxAttempts; i++)
