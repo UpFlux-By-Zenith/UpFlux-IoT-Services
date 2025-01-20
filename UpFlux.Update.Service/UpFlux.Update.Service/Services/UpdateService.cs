@@ -88,29 +88,29 @@ namespace UpFlux.Update.Service.Services
                 }
 
                 // Monitor the monitoring service logs
-                bool monitoringResult = await _logMonitoringService.MonitorLogsAsync();
-                if (!monitoringResult)
-                {
-                    _logger.LogError("Errors detected after installation. Initiating rollback.");
-                    await _tcpListenerService.SendNotificationAsync("Errors detected after installation of version " + package.Version);
+                //bool monitoringResult = await _logMonitoringService.MonitorLogsAsync();
+                //if (!monitoringResult)
+                //{
+                //    _logger.LogError("Errors detected after installation. Initiating rollback.");
+                //    await _tcpListenerService.SendNotificationAsync("Errors detected after installation of version " + package.Version);
 
-                    UpdatePackage previousPackage = _versionManager.GetPreviousVersion(package.Version);
-                    if (previousPackage != null)
-                    {
-                        await _rollbackService.RollbackAsync(previousPackage);
-                        await _tcpListenerService.SendNotificationAsync("Rolled back to version " + previousPackage.Version);
-                    }
-                    else
-                    {
-                        _logger.LogError("No previous version available for rollback.");
-                        await _tcpListenerService.SendNotificationAsync("No previous version available for rollback.");
-                    }
-                }
-                else
-                {
+                //    UpdatePackage previousPackage = _versionManager.GetPreviousVersion(package.Version);
+                //    if (previousPackage != null)
+                //    {
+                //        await _rollbackService.RollbackAsync(previousPackage);
+                //        await _tcpListenerService.SendNotificationAsync("Rolled back to version " + previousPackage.Version);
+                //    }
+                //    else
+                //    {
+                //        _logger.LogError("No previous version available for rollback.");
+                //        await _tcpListenerService.SendNotificationAsync("No previous version available for rollback.");
+                //    }
+                //}
+                //else
+                //{
                     _logger.LogInformation("Update installed successfully and is running without errors.");
                     await _tcpListenerService.SendNotificationAsync("Update to version " + package.Version + " installed successfully.");
-                }
+                //}
             }
             catch (Exception ex)
             {

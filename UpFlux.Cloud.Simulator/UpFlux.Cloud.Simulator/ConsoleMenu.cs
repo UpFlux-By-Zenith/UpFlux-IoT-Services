@@ -79,7 +79,14 @@ namespace UpFlux.Cloud.Simulator
             // Use HTTP for the gateway address
             GrpcChannel channel = GrpcChannel.ForAddress(
                 _cloudSettings.GatewayAddress,
-                new GrpcChannelOptions()
+                //new GrpcChannelOptions()
+                new GrpcChannelOptions
+                {
+                    // To Increase send and receive sizes in bytes
+                    // 200 MB:
+                    MaxSendMessageSize = 200 * 1024 * 1024,
+                    MaxReceiveMessageSize = 200 * 1024 * 1024
+                }
             );
 
             return channel;

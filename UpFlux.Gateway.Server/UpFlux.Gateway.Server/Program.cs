@@ -74,6 +74,9 @@ namespace UpFlux.Gateway.Server
                         // Kestrel server on port 5001 with TLS
                         webBuilder.ConfigureKestrel(serverOptions =>
                         {
+                            // explicitly telling kestrel to allow 200 MB for the package size
+                            serverOptions.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
+
                             serverOptions.ListenAnyIP(gatewayGrpcPort, listenOptions =>
                             {
                                 listenOptions.Protocols = HttpProtocols.Http2;
