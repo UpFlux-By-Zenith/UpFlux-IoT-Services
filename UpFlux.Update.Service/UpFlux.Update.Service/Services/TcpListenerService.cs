@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -283,65 +284,54 @@ namespace UpFlux.Update.Service.Services
         {
             try
             {
-                string updateServiceLogPath = _config.UpdateServiceLog;
-                string monitoringServiceLogPath = _config.MonitoringServiceLog;
+                string logsDir = _config.UpfluxLogPath;
 
-                if (!File.Exists(updateServiceLogPath) && !File.Exists(monitoringServiceLogPath))
+                if (!Directory.Exists(logsDir))
                 {
-                    _logger.LogWarning("No log files found to send.");
+                    _logger.LogWarning("Logs directory '{dir}' does not exist. Sending fileCount=0.", logsDir);
+
+                    // Send fileCount=0
+                    byte[] zeroCount = BitConverter.GetBytes(0);
+                    await networkStream.WriteAsync(zeroCount, 0, zeroCount.Length);
+                    await networkStream.FlushAsync();
+                    _logger.LogInformation("Logs directory not found. Sent fileCount=0.");
                     return;
                 }
 
-                // Prepare a list of logs to send
-                var logsToSend = new List<(string FileName, string FilePath)>();
+                string zipName = $"upflux-logs-{DateTime.UtcNow:yyyyMMddHHmmss}.zip";
+                string zipFilePath = Path.Combine("/tmp", zipName);
 
-                if (File.Exists(updateServiceLogPath))
+                // Delete the old zip incase it exists
+                if (File.Exists(zipFilePath))
                 {
-                    logsToSend.Add(("UpdateServiceLog.log", updateServiceLogPath));
+                    File.Delete(zipFilePath);
                 }
 
-                if (File.Exists(monitoringServiceLogPath))
-                {
-                    logsToSend.Add(("MonitoringServiceLog.log", monitoringServiceLogPath));
-                }
+                ZipFile.CreateFromDirectory(logsDir, zipFilePath);
 
-                // Send the number of log files
-                // Always send fileCount
-                int fileCount = logsToSend.Count;
+                int fileCount = 1;
                 byte[] fileCountBytes = BitConverter.GetBytes(fileCount);
                 await networkStream.WriteAsync(fileCountBytes, 0, fileCountBytes.Length);
                 await networkStream.FlushAsync();
 
-                if (fileCount == 0)
-                {
-                    _logger.LogInformation("No logs to send, sent fileCount=0 to Gateway.");
-                    return;
-                }
+                // Prepare the zip file name
+                byte[] fileNameBytes = Encoding.UTF8.GetBytes(zipName);
+                byte[] fileNameLenBytes = BitConverter.GetBytes(fileNameBytes.Length);
+                await networkStream.WriteAsync(fileNameLenBytes, 0, fileNameLenBytes.Length);
+                await networkStream.WriteAsync(fileNameBytes, 0, fileNameBytes.Length);
+                await networkStream.FlushAsync();
 
-                foreach (var log in logsToSend)
-                {
-                    // Send the file name length and file name
-                    byte[] fileNameBytes = Encoding.UTF8.GetBytes(log.FileName);
-                    byte[] fileNameLengthBytes = BitConverter.GetBytes(fileNameBytes.Length);
-                    await networkStream.WriteAsync(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
-                    await networkStream.WriteAsync(fileNameBytes, 0, fileNameBytes.Length);
-                    //await networkStream.FlushAsync();
+                // Read the zip data and send
+                byte[] zipData = File.ReadAllBytes(zipFilePath);
+                int zipLength = zipData.Length;
+                byte[] zipLenBytes = BitConverter.GetBytes(zipLength);
+                await networkStream.WriteAsync(zipLenBytes, 0, zipLenBytes.Length);
 
-                    // Read the file data
-                    byte[] logBytes = File.ReadAllBytes(log.FilePath);
-                    int logLength = logBytes.Length;
+                // Write the actual zip file
+                await networkStream.WriteAsync(zipData, 0, zipData.Length);
+                await networkStream.FlushAsync();
 
-                    // Send the length of the log file (as 4-byte integer)
-                    byte[] lengthBytes = BitConverter.GetBytes(logLength);
-                    await networkStream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
-                    //await networkStream.FlushAsync();
-
-                    // Send the log file data
-                    await networkStream.WriteAsync(logBytes, 0, logBytes.Length);
-                    await networkStream.FlushAsync();
-                }
-
-                _logger.LogInformation("Logs sent to Gateway Server successfully.");
+                _logger.LogInformation("Logs from '{logsDir}' zipped to '{zipFilePath}' and sent to Gateway.", logsDir, zipFilePath);
             }
             catch (Exception ex)
             {
