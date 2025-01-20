@@ -26,6 +26,9 @@ namespace UpFlux.Update.Service.Models
         public int MaxStoredVersions { get; set; }
 
         [Required]
+        public string MonitoringServiceLog { get; set; }
+
+        [Required]
         public string UpfluxLogPath { get; set; }
 
         public int SimulationTimeoutSeconds { get; set; }
