@@ -40,7 +40,7 @@ namespace UpFlux.Cloud.Simulator
             _logger.LogInformation("CloudSim: Received {0} bytes from device {1}", ms.Length, deviceUuid);
 
             Directory.CreateDirectory("CloudLogs");
-            string path = Path.Combine("CloudLogs", deviceUuid + "_" + fileName);
+            string path = Path.Combine("CloudLogs", fileName);
             File.WriteAllBytes(path, ms.ToArray());
             _logger.LogInformation("Logs saved to {0}", path);
 

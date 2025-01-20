@@ -14,10 +14,7 @@ service UpdateService {
 // Message definitions
 
 message UpdatePackageRequest {
-  string packageId = 1;
-  string version = 2;
-  string fileName = 3;
-  bytes packageData = 4;
-  bytes signature = 5;
-  repeated string targetDevices = 6;
+  string fileName = 1;           // The .deb package name
+  bytes packageData = 2;         // The raw .deb content
+  repeated string targetDevices = 3;  // Target device UUID(s)
 }

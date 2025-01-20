@@ -59,7 +59,6 @@ namespace UpFlux.Gateway.Server
                         services.AddSingleton<CloudCommunicationService>();
                         services.AddSingleton<AlertingService>();
                         services.AddSingleton<DeviceCommunicationService>();
-                        services.AddSingleton<DataAggregationService>();
                         services.AddSingleton<UpdateManagementService>();
                         services.AddSingleton<LogCollectionService>();
                         services.AddSingleton<CommandExecutionService>();

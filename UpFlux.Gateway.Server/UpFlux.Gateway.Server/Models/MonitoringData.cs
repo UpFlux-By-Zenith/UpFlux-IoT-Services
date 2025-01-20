@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace UpFlux.Gateway.Server.Models
 {
     /// <summary>
     /// Represents the monitoring data received from a device.
+    /// Matches the nested JSON structure from the device.
     /// </summary>
     public class MonitoringData
     {
@@ -14,45 +14,87 @@ namespace UpFlux.Gateway.Server.Models
         public string UUID { get; set; }
 
         /// <summary>
-        /// Gets or sets the timestamp of the data (UTC).
+        /// Nested metrics sub-objects (Cpu, Memory, etc.).
         /// </summary>
-        public DateTime Timestamp { get; set; }
+        public DeviceMetrics Metrics { get; set; }
 
         /// <summary>
-        /// Gets or sets the metrics data.
-        /// </summary>
-        public Metrics Metrics { get; set; }
-
-        /// <summary>
-        /// Gets or sets the sensor data.
+        /// Sensor data for red/green/blue, etc.
         /// </summary>
         public SensorData SensorData { get; set; }
     }
 
     /// <summary>
-    /// Represents the system metrics data.
+    /// Top-level container for all sub-metrics from the device,
+    /// like "CpuMetrics", "MemoryMetrics", "NetworkMetrics"
     /// </summary>
-    public class Metrics
+    public class DeviceMetrics
     {
-        public double CpuUsage { get; set; }
-        public double MemoryUsage { get; set; }
-        public double DiskUsage { get; set; }
-        public NetworkUsage NetworkUsage { get; set; }
-        public double CpuTemperature { get; set; }
-        public double SystemUptime { get; set; }
+        public CpuMetrics CpuMetrics { get; set; }
+        public MemoryMetrics MemoryMetrics { get; set; }
+        public NetworkMetrics NetworkMetrics { get; set; }
+        public DiskMetrics DiskMetrics { get; set; }
+        public SystemUptimeMetrics SystemUptimeMetrics { get; set; }
+        public CpuTemperatureMetrics CpuTemperatureMetrics { get; set; }
+        public DateTime Timestamp { get; set; }
     }
 
     /// <summary>
-    /// Represents network usage data.
+    /// CPU usage stats as sent by the device (CurrentUsage, LoadAverage).
     /// </summary>
-    public class NetworkUsage
+    public class CpuMetrics
     {
-        public long BytesSent { get; set; }
-        public long BytesReceived { get; set; }
+        public double CurrentUsage { get; set; }
+        public double LoadAverage { get; set; }
     }
 
     /// <summary>
-    /// Represents sensor data.
+    /// Memory usage stats (Total, Free, Used).
+    /// </summary>
+    public class MemoryMetrics
+    {
+        public long TotalMemory { get; set; }
+        public long FreeMemory { get; set; }
+        public long UsedMemory { get; set; }
+    }
+
+    /// <summary>
+    /// Network usage stats (RX/TX).
+    /// </summary>
+    public class NetworkMetrics
+    {
+        public long ReceivedBytes { get; set; }
+        public long TransmittedBytes { get; set; }
+    }
+
+    /// <summary>
+    /// Disk usage stats (Total, Free, Used).
+    /// </summary>
+    public class DiskMetrics
+    {
+        public long TotalDiskSpace { get; set; }
+        public long FreeDiskSpace { get; set; }
+        public long UsedDiskSpace { get; set; }
+    }
+
+    /// <summary>
+    /// System uptime in seconds.
+    /// </summary>
+    public class SystemUptimeMetrics
+    {
+        public long UptimeSeconds { get; set; }
+    }
+
+    /// <summary>
+    /// CPU temperature metrics (in Celsius).
+    /// </summary>
+    public class CpuTemperatureMetrics
+    {
+        public double TemperatureCelsius { get; set; }
+    }
+
+    /// <summary>
+    /// Represents sensor data (R/G/B) from the device.
     /// </summary>
     public class SensorData
     {

@@ -12,7 +12,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using UpFlux.Gateway.Server.Models;
-using UpFlux.Gateway.Server.Protos;
 using UpFlux.Gateway.Server.Repositories;
 using VersionInfo = UpFlux.Gateway.Server.Models.VersionInfo;
 
@@ -34,7 +33,6 @@ namespace UpFlux.Gateway.Server.Services
         private readonly ILogger<DeviceCommunicationService> _logger;
         private readonly GatewaySettings _settings;
         private readonly DeviceRepository _deviceRepository;
-        private readonly DataAggregationService _dataAggregationService;
         private readonly AlertingService _alertingService;
         private readonly CloudCommunicationService _cloudCommunicationService;
 
@@ -47,14 +45,12 @@ namespace UpFlux.Gateway.Server.Services
             ILogger<DeviceCommunicationService> logger,
             IOptions<GatewaySettings> options,
             DeviceRepository deviceRepository,
-            DataAggregationService dataAggregationService,
             AlertingService alertingService,
             CloudCommunicationService cloudCommunicationService)
         {
             _logger = logger;
             _settings = options.Value;
             _deviceRepository = deviceRepository;
-            _dataAggregationService = dataAggregationService;
             _alertingService = alertingService;
             _cloudCommunicationService = cloudCommunicationService;
         }
@@ -249,7 +245,7 @@ namespace UpFlux.Gateway.Server.Services
                     if (message.StartsWith("MONITORING_DATA:"))
                     {
                         string data = message.Substring("MONITORING_DATA:".Length);
-                        await ProcessDeviceDataAsync(device, data).ConfigureAwait(false);
+                        await ForwardMonitoringDataToCloudAsync(device, data).ConfigureAwait(false);
                         await SendMessageAsync(networkStream, "DATA_RECEIVED\n").ConfigureAwait(false);
                     }
                     else if (message == "READY_FOR_LICENSE")
@@ -295,9 +291,12 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Processes monitoring data received from the device.
+        /// Forwards monitoring data received from the device directly to the cloud.
         /// </summary>
-        private async Task ProcessDeviceDataAsync(Device device, string data)
+        /// <param name="device">The device sending the data.</param>
+        /// <param name="data">The raw monitoring data JSON string.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        private async Task ForwardMonitoringDataToCloudAsync(Device device, string data)
         {
             try
             {
@@ -308,8 +307,15 @@ namespace UpFlux.Gateway.Server.Services
                     return;
                 }
 
-                _dataAggregationService.AddMonitoringData(monitoringData);
-                _logger.LogInformation("Monitoring data from device UUID: {uuid} processed successfully.", device.UUID);
+                _logger.LogInformation("Forwarding monitoring data for device UUID: {uuid} to the cloud.", device.UUID);
+
+                // Forward the monitoring data to the cloud
+                await _cloudCommunicationService.SendAggregatedDataAsync(new List<AggregatedData>
+                {
+                    TransformToAggregatedData(monitoringData)
+                }).ConfigureAwait(false);
+
+                _logger.LogInformation("Monitoring data for device UUID: {uuid} forwarded to the cloud successfully.", device.UUID);
             }
             catch (JsonException ex)
             {
@@ -317,10 +323,40 @@ namespace UpFlux.Gateway.Server.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing monitoring data from device UUID: {uuid}", device.UUID);
+                _logger.LogError(ex, "Error forwarding monitoring data for device UUID: {uuid}", device.UUID);
             }
+        }
 
-            await Task.CompletedTask;
+        /// <summary>
+        /// Transforms MonitoringData into AggregatedData format for the cloud.
+        /// </summary>
+        /// <param name="monitoringData">The monitoring data to transform.</param>
+        /// <returns>The transformed AggregatedData object.</returns>
+        private AggregatedData TransformToAggregatedData(MonitoringData monitoringData)
+        {
+            return new AggregatedData
+            {
+                UUID = monitoringData.UUID,
+                Timestamp = monitoringData.Metrics.Timestamp,
+                CpuUsage = monitoringData.Metrics.CpuMetrics.CurrentUsage,
+                MemoryUsage = monitoringData.Metrics.MemoryMetrics.UsedMemory /
+                              (double)monitoringData.Metrics.MemoryMetrics.TotalMemory * 100,
+                DiskUsage = monitoringData.Metrics.DiskMetrics.UsedDiskSpace /
+                            (double)monitoringData.Metrics.DiskMetrics.TotalDiskSpace * 100,
+                CpuTemperature = monitoringData.Metrics.CpuTemperatureMetrics.TemperatureCelsius,
+                SystemUptime = monitoringData.Metrics.SystemUptimeMetrics.UptimeSeconds,
+                NetworkUsage = new NetworkUsage
+                {
+                    BytesSent = monitoringData.Metrics.NetworkMetrics.TransmittedBytes,
+                    BytesReceived = monitoringData.Metrics.NetworkMetrics.ReceivedBytes
+                },
+                SensorData = new SensorData
+                {
+                    RedValue = monitoringData.SensorData.RedValue,
+                    GreenValue = monitoringData.SensorData.GreenValue,
+                    BlueValue = monitoringData.SensorData.BlueValue
+                }
+            };
         }
 
         /// <summary>
@@ -654,7 +690,7 @@ namespace UpFlux.Gateway.Server.Services
         {
             try
             {
-                DeviceRegistrationResponse licenseResponse = await _cloudCommunicationService.RegisterDeviceAsync(uuid);
+                Protos.DeviceRegistrationResponse licenseResponse = await _cloudCommunicationService.RegisterDeviceAsync(uuid);
 
                 if (licenseResponse.Approved)
                 {
@@ -696,7 +732,7 @@ namespace UpFlux.Gateway.Server.Services
         {
             try
             {
-                LicenseRenewalResponse renewalResponse = await _cloudCommunicationService.RenewLicenseAsync(device.UUID);
+                Protos.LicenseRenewalResponse renewalResponse = await _cloudCommunicationService.RenewLicenseAsync(device.UUID);
 
                 if (renewalResponse.Approved)
                 {

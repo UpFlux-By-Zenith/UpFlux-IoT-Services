@@ -142,31 +142,20 @@ namespace UpFlux.Cloud.Simulator
             }
             string fileName = Path.GetFileName(packagePath);
 
-            ConsoleSync.Write("Enter version for this update: ");
-            string version = ConsoleSync.ReadLine() ?? "1.0.0";
-
-            string packageId = Guid.NewGuid().ToString();
-
             // read bytes
             byte[] packageData = await File.ReadAllBytesAsync(packagePath);
-
-            // we haven't created no real signature for now
-            byte[] signature = new byte[0];
 
             using GrpcChannel channel = CreateGatewayChannel();
             UpdateService.UpdateServiceClient updateClient = new UpdateService.UpdateServiceClient(channel);
 
             UpdatePackageRequest request = new UpdatePackageRequest
             {
-                PackageId = packageId,
-                Version = version,
                 FileName = fileName,
-                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData),
-                Signature = Google.Protobuf.ByteString.CopyFrom(signature)
+                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData)
             };
             request.TargetDevices.AddRange(uuids);
 
-            ConsoleSync.WriteLine($"Sending update package {packageId} to Gateway for {uuids.Length} device(s)...");
+            ConsoleSync.WriteLine($"Sending update package '{fileName}' to Gateway for {uuids.Length} device(s)...");
             await updateClient.SendUpdatePackageAsync(request);
             ConsoleSync.WriteLine("Update package sent.");
         }
