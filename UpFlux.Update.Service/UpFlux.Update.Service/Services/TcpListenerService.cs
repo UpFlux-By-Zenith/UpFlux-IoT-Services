@@ -68,13 +68,6 @@ namespace UpFlux.Update.Service.Services
 
                 _logger.LogInformation("Connection established with the Gateway Server.");
 
-                //string uuidMessage = $"UUID:{_config.DeviceUuid}\n";
-                //byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
-                //await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
-                //await networkStream.FlushAsync();
-
-                //_logger.LogInformation("Device UUID sent to Gateway Server: {uuid}", _config.DeviceUuid);
-
                 string command = await ReadMessageAsync(networkStream);
                 if (string.IsNullOrEmpty(command))
                 {
@@ -419,7 +412,7 @@ namespace UpFlux.Update.Service.Services
                 _logger.LogInformation("Handling GET_VERSIONS command.");
 
                 // Get the current installed version and list of available versions
-                object versionInfo = _versionManager.GetVersionInfo();
+                FullVersionInfo versionInfo = _versionManager.GetFullVersionInfo();
 
                 // Serialize versionInfo to JSON
                 string versionInfoJson = JsonConvert.SerializeObject(versionInfo);

@@ -54,7 +54,6 @@ namespace UpFlux.Gateway.Server
                         services.Configure<GatewaySettings>(configuration.GetSection("GatewaySettings"));
 
                         services.AddSingleton<DeviceRepository>();
-                        services.AddSingleton<VersionRepository>();
 
                         services.AddSingleton<CloudCommunicationService>();
                         services.AddSingleton<AlertingService>();
@@ -62,7 +61,6 @@ namespace UpFlux.Gateway.Server
                         services.AddSingleton<UpdateManagementService>();
                         services.AddSingleton<LogCollectionService>();
                         services.AddSingleton<CommandExecutionService>();
-                        services.AddSingleton<VersionControlService>();
 
                         services.AddHostedService<Worker>();
                         services.AddHostedService<DeviceDiscoveryService>();

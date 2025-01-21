@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace UpFlux.Update.Service.Models
 {
-    public class VersionInfo
+    public class FullVersionInfo
     {
-        public string CurrentVersion { get; set; }
-        public List<string> AvailableVersions { get; set; }
+        public VersionRecord Current { get; set; }
+        public List<VersionRecord> Available { get; set; }
     }
 }

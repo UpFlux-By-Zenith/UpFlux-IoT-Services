@@ -13,7 +13,7 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using UpFlux.Gateway.Server.Models;
 using UpFlux.Gateway.Server.Repositories;
-using VersionInfo = UpFlux.Gateway.Server.Models.VersionInfo;
+using FullVersionInfo = UpFlux.Gateway.Server.Models.FullVersionInfo;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -478,7 +478,7 @@ namespace UpFlux.Gateway.Server.Services
         /// Requests version information from a device.
         /// Returns a list of VersionInfo objects representing versions installed on the device.
         /// </summary>
-        public async Task<List<VersionInfo>> RequestVersionInfoAsync(Device device)
+        public async Task<FullVersionInfo> RequestVersionInfoAsync(Device device)
         {
             try
             {
@@ -504,19 +504,8 @@ namespace UpFlux.Gateway.Server.Services
                     return null;
                 }
 
-                List<string> versions = JsonConvert.DeserializeObject<List<string>>(responseMessage);
-                if (versions == null || versions.Count == 0)
-                {
-                    _logger.LogWarning("Device {uuid} returned no versions.", device.UUID);
-                    return null;
-                }
-
-                return versions.Select(version => new VersionInfo
-                {
-                    DeviceUUID = device.UUID,
-                    Version = version,
-                    InstalledAt = DateTime.UtcNow
-                }).ToList();
+                FullVersionInfo result = JsonConvert.DeserializeObject<FullVersionInfo>(responseMessage);
+                return result;
             }
             catch (Exception ex)
             {

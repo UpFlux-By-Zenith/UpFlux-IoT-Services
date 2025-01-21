@@ -132,5 +132,45 @@ namespace UpFlux.Update.Service.Utilities
                 AvailableVersions = availableVersions
             };
         }
+
+        public FullVersionInfo GetFullVersionInfo()
+        {
+            // Get the current installed version
+            string currentVersion = GetCurrentInstalledVersion();
+
+            // Get the installation date of the current version from the package file using the GetPackageByVersion method
+            UpdatePackage currentPackage = GetPackageByVersion(currentVersion);
+            DateTime currentVersionInstalledAt = File.GetCreationTimeUtc(currentPackage.FilePath);
+
+            VersionRecord currentRecord = new VersionRecord
+            {
+                Version = currentVersion,
+                InstalledAt = currentVersionInstalledAt
+            };
+
+            // Gather other packages in /opt/upflux-update-service/packages
+            List<VersionRecord> availableList = new List<VersionRecord>();
+            string[] debFiles = Directory.GetFiles(_config.PackageDirectory, _config.PackageNamePattern);
+            foreach (string debPath in debFiles)
+            {
+                string version = GetVersionFromFileName(debPath);
+                DateTime fileTime = File.GetCreationTimeUtc(debPath);
+
+                availableList.Add(new VersionRecord
+                {
+                    Version = version,
+                    InstalledAt = fileTime
+                });
+            }
+
+            // remove the "Current" from the "Available" if it's in that folder
+            availableList.RemoveAll(r => r.Version == currentVersion);
+
+            return new FullVersionInfo
+            {
+                Current = currentRecord,
+                Available = availableList
+            };
+        }
     }
 }

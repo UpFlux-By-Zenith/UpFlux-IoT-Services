@@ -169,24 +169,47 @@ namespace UpFlux.Cloud.Simulator
 
         private async Task MenuRequestVersionData()
         {
-            // calls the Gateway's VersionDataService
+            // Create the gRPC channel
             using GrpcChannel channel = CreateGatewayChannel();
             VersionDataService.VersionDataServiceClient versionClient = new VersionDataService.VersionDataServiceClient(channel);
 
             ConsoleSync.WriteLine("Requesting version data from Gateway...");
 
+            // No fields in VersionDataRequest are needed for an all-devices request
             VersionDataRequest request = new VersionDataRequest();
             VersionDataResponse resp = await versionClient.RequestVersionDataAsync(request);
 
             ConsoleSync.WriteLine($"Result => success={resp.Success}, message={resp.Message}");
-            foreach (DeviceVersions? devVers in resp.DeviceVersionsList)
+
+            foreach (DeviceVersions devVers in resp.DeviceVersionsList)
             {
-                ConsoleSync.WriteLine($" Device={devVers.DeviceUuid}");
-                foreach (Gateway.Server.Protos.VersionInfo? ver in devVers.Versions)
+                ConsoleSync.WriteLine($"\nDevice={devVers.DeviceUuid}");
+
+                if (devVers.Current != null)
                 {
-                    ConsoleSync.WriteLine($"   Version={ver.Version}, InstalledAt={ver.InstalledAt}");
+                    DateTime currentInstalledAt = devVers.Current.InstalledAt.ToDateTime();
+                    ConsoleSync.WriteLine($"  CURRENT => Version={devVers.Current.Version}, InstalledAt={currentInstalledAt}");
+                }
+                else
+                {
+                    ConsoleSync.WriteLine("  CURRENT => (none)");
+                }
+
+                if (devVers.Available.Count > 0)
+                {
+                    ConsoleSync.WriteLine("  AVAILABLE:");
+                    foreach (Gateway.Server.Protos.VersionInfo ver in devVers.Available)
+                    {
+                        DateTime installedAt = ver.InstalledAt.ToDateTime();
+                        ConsoleSync.WriteLine($"    - Version={ver.Version}, InstalledAt={installedAt}");
+                    }
+                }
+                else
+                {
+                    ConsoleSync.WriteLine("  AVAILABLE => (none)");
                 }
             }
         }
+
     }
 }

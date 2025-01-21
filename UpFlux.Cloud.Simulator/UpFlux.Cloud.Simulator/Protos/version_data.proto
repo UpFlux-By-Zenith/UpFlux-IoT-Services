@@ -12,21 +12,24 @@ service VersionDataService {
 }
 
 message VersionDataRequest {
-  // 
-}
-
-message DeviceVersions {
-  string deviceUuid = 1;
-  repeated VersionInfo versions = 2;
-}
-
-message VersionInfo {
-  string version = 1;
-  google.protobuf.Timestamp installedAt = 2;
+  // No fields needed if we just want all devices
 }
 
 message VersionDataResponse {
   bool success = 1;
   string message = 2;
   repeated DeviceVersions deviceVersionsList = 3;
+}
+
+// Represents versions for a single device
+message DeviceVersions {
+  string deviceUuid = 1;
+  VersionInfo current = 2;                  // The currently installed version
+  repeated VersionInfo available = 3;       // The other packages available
+}
+
+// Single version entry with version string & install timestamp
+message VersionInfo {
+  string version = 1;
+  google.protobuf.Timestamp installedAt = 2;
 }
