@@ -32,7 +32,8 @@ namespace UpFlux.Gateway.Server.Services
         /// <inheritdoc/>
         public override async Task<Google.Protobuf.WellKnownTypes.Empty> SendUpdatePackage(UpdatePackageRequest request, ServerCallContext context)
         {
-            _logger.LogInformation("Received update package {packageId} version {version} from cloud.", request.PackageId, request.Version);
+            _logger.LogInformation("Received update package '{file}' from cloud, targeting {count} device(s).",
+                          request.FileName, request.TargetDevices.Count);
 
             try
             {
@@ -43,11 +44,8 @@ namespace UpFlux.Gateway.Server.Services
                 // Create UpdatePackage model
                 UpdatePackage updatePackage = new UpdatePackage
                 {
-                    PackageId = request.PackageId,
-                    Version = request.Version,
                     FileName = request.FileName,
                     FilePath = tempFilePath,
-                    Signature = request.Signature.ToByteArray(),
                     TargetDevices = request.TargetDevices.ToArray(),
                     ReceivedAt = DateTime.UtcNow
                 };
@@ -57,7 +55,7 @@ namespace UpFlux.Gateway.Server.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while receiving update package {packageId}", request.PackageId);
+                _logger.LogError(ex, "Error receiving update package '{file}'", request.FileName);
                 throw new RpcException(new Status(StatusCode.Internal, "Failed to process update package."));
             }
 

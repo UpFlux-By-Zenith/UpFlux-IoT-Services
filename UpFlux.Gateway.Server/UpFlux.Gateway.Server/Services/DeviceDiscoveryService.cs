@@ -115,7 +115,7 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogInformation("New device detected at IP: {ip}", ip);
 
                     // Attempt to establish a secure connection
-                    await _deviceCommunicationService.InitiateSecureConnectionAsync(ip);
+                    await _deviceCommunicationService.InitiateConnectionAsync(ip);
 
                     // Add to known devices (Placeholder device object)
                     Device device = new Device { IPAddress = ip };
@@ -153,7 +153,15 @@ namespace UpFlux.Gateway.Server.Services
         private List<IPAddress> GetLocalIPAddresses()
         {
             IPHostEntry host = Dns.GetHostEntry(Dns.GetHostName());
-            return host.AddressList.Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToList();
+            //return host.AddressList.Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !IPAddress.IsLoopback(a)).ToList();
+            return NetworkInterface.GetAllNetworkInterfaces()
+        .Where(n => n.OperationalStatus == OperationalStatus.Up &&
+                    n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                    n.Name == _settings.DeviceNetworkInterface)
+        .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+        .Where(ua => ua.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        .Select(ua => ua.Address)
+        .ToList();
         }
     }
 }

@@ -35,28 +35,17 @@ namespace UpFlux.Gateway.Server.Services
         /// <param name="settings">Gateway settings.</param>
         public CloudCommunicationService(
             ILogger<CloudCommunicationService> logger,
-            IOptions<GatewaySettings> settings,
-            AlertService.AlertServiceClient alertClient)
+            IOptions<GatewaySettings> settings)
         {
             _logger = logger;
             _settings = settings.Value;
-            _alertClient = alertClient;
 
-            HttpClientHandler handler = new HttpClientHandler();
-            handler.ClientCertificates.Add(new X509Certificate2(_settings.CertificatePath, _settings.CertificatePassword));
-
-            // Trust the cloud server's certificate (optional if using a trusted CA - we need to decide as a team)
-            handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-
-            HttpClient httpClient = new HttpClient(handler);
-
-            GrpcChannel channel = GrpcChannel.ForAddress(_settings.CloudServerAddress, new GrpcChannelOptions
-            {
-                HttpClient = httpClient
-            });
+            GrpcChannel channel = GrpcChannel.ForAddress(_settings.CloudServerAddress, new GrpcChannelOptions());
 
             _client = new LicenseService.LicenseServiceClient(channel);
             _monitoringClient = new MonitoringService.MonitoringServiceClient(channel);
+            _cloudLogClient = new CloudLogService.CloudLogServiceClient(channel);
+            _alertClient = new AlertService.AlertServiceClient(channel);
 
             // Configure retry policy using Polly
             _retryPolicy = Policy.Handle<RpcException>(ex => IsTransientFault(ex))
@@ -176,34 +165,34 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Transforms an AggregatedData object to the Protobuf-generated AggregatedData message.
+        /// Transforms the internal aggregated data model to the Protobuf AggregatedData format.
         /// </summary>
-        /// <param name="data">The aggregated data to transform.</param>
-        /// <returns>The Protobuf AggregatedData message.</returns>
-        private Protos.AggregatedData TransformToProtobufAggregatedData(Models.AggregatedData data)
+        /// <param name="aggregatedData">The internal aggregated data.</param>
+        /// <returns>The Protobuf AggregatedData object.</returns>
+        private Protos.AggregatedData TransformToProtobufAggregatedData(Models.AggregatedData aggregatedData)
         {
             return new Protos.AggregatedData
             {
-                Uuid = data.UUID,
-                Timestamp = Timestamp.FromDateTime(data.Timestamp),
-                Metrics = new Protos.Metrics
+                Uuid = aggregatedData.UUID,
+                Timestamp = Timestamp.FromDateTime(aggregatedData.Timestamp.ToUniversalTime()),
+                Metrics = new Metrics
                 {
-                    CpuUsage = data.Metrics.CpuUsage,
-                    MemoryUsage = data.Metrics.MemoryUsage,
-                    DiskUsage = data.Metrics.DiskUsage,
-                    CpuTemperature = data.Metrics.CpuTemperature,
-                    SystemUptime = data.Metrics.SystemUptime,
+                    CpuUsage = aggregatedData.CpuUsage,
+                    MemoryUsage = aggregatedData.MemoryUsage,
+                    DiskUsage = aggregatedData.DiskUsage,
                     NetworkUsage = new Protos.NetworkUsage
                     {
-                        BytesSent = data.Metrics.NetworkUsage.BytesSent,
-                        BytesReceived = data.Metrics.NetworkUsage.BytesReceived
-                    }
+                        BytesSent = aggregatedData.NetworkUsage.BytesSent,
+                        BytesReceived = aggregatedData.NetworkUsage.BytesReceived
+                    },
+                    CpuTemperature = aggregatedData.CpuTemperature,
+                    SystemUptime = aggregatedData.SystemUptime
                 },
                 SensorData = new Protos.SensorData
                 {
-                    RedValue = data.SensorData.RedValue,
-                    GreenValue = data.SensorData.GreenValue,
-                    BlueValue = data.SensorData.BlueValue
+                    RedValue = aggregatedData.SensorData.RedValue,
+                    GreenValue = aggregatedData.SensorData.GreenValue,
+                    BlueValue = aggregatedData.SensorData.BlueValue
                 }
             };
         }

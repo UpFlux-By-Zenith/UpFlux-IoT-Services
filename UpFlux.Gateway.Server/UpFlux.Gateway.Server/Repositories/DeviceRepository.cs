@@ -39,7 +39,8 @@ namespace UpFlux.Gateway.Server.Repositories
                     License TEXT,
                     LicenseExpiration TEXT,
                     LastSeen TEXT,
-                    RegistrationStatus TEXT
+                    RegistrationStatus TEXT,
+                    NextEarliestRenewalAttempt TEXT
                 )
             ");
         }
@@ -57,8 +58,8 @@ namespace UpFlux.Gateway.Server.Repositories
             {
                 // Insert new device
                 connection.Execute(@"
-                    INSERT INTO Devices (UUID, IPAddress, License, LicenseExpiration, LastSeen, RegistrationStatus)
-                    VALUES (@UUID, @IPAddress, @License, @LicenseExpiration, @LastSeen, @RegistrationStatus)
+                    INSERT INTO Devices (UUID, IPAddress, License, LicenseExpiration, LastSeen, RegistrationStatus, NextEarliestRenewalAttempt)
+                    VALUES (@UUID, @IPAddress, @License, @LicenseExpiration, @LastSeen, @RegistrationStatus, @NextEarliestRenewalAttempt)
                 ", device);
             }
             else
@@ -70,7 +71,8 @@ namespace UpFlux.Gateway.Server.Repositories
                         License = @License,
                         LicenseExpiration = @LicenseExpiration,
                         LastSeen = @LastSeen,
-                        RegistrationStatus = @RegistrationStatus
+                        RegistrationStatus = @RegistrationStatus,
+                        NextEarliestRenewalAttempt = @NextEarliestRenewalAttempt
                     WHERE UUID = @UUID
                 ", device);
             }

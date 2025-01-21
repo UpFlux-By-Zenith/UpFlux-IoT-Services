@@ -15,6 +15,9 @@ namespace UpFlux.Update.Service.Models
         public int GatewayServerPort { get; set; }
 
         [Required]
+        public int DeviceServerPort { get; set; }
+
+        [Required]
         public string IncomingPackageDirectory { get; set; }
 
         [Required]
@@ -26,7 +29,7 @@ namespace UpFlux.Update.Service.Models
         public string MonitoringServiceLog { get; set; }
 
         [Required]
-        public string UpdateServiceLog { get; set; }
+        public string UpfluxLogPath { get; set; }
 
         public int SimulationTimeoutSeconds { get; set; }
 
@@ -36,14 +39,6 @@ namespace UpFlux.Update.Service.Models
 
         [Required]
         public string PackageNamePattern { get; set; }
-
-        [Required]
-        public string CertificatePath { get; set; }
-
-        public string CertificatePassword { get; set; }
-
-        [Required]
-        public string TrustedCaCertificatePath { get; set; }
 
         [Required]
         public string DeviceUuid { get; set; }

@@ -31,72 +31,56 @@ namespace UpFlux.Gateway.Server
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
 
-            // Create a temporary ServiceCollection to build a ServiceProvider for Serilog configuration
-            ServiceCollection services = new ServiceCollection();
-
-            // Register configuration
-            services.AddSingleton<IConfiguration>(configuration);
-
-            // Register necessary services for AlertingService
-            services.Configure<GatewaySettings>(configuration.GetSection("GatewaySettings"));
-            services.AddSingleton<CloudCommunicationService>(); // Ensure dependencies are registered
-            services.AddSingleton<AlertingService>(); // Register AlertingService
-
-            // Build the ServiceProvider
-            ServiceProvider serviceProvider = services.BuildServiceProvider();
-
-            // Retrieve AlertingService from the ServiceProvider
-            AlertingService? alertingService = serviceProvider.GetService<AlertingService>();
-
             // Configure Serilog
             Log.Logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(configuration)
-                .WriteTo.Sink(new SerilogAlertingSink(null, alertingService))
                 .CreateLogger();
 
             try
             {
                 Log.Information("Starting UpFlux Gateway Server...");
 
+                // Retrieve GatewayGrpcPort from configuration
+                var gatewayGrpcPort = configuration.GetSection("GatewaySettings").GetValue<int>("GatewayGrpcPort");
+
+                // 3. Create and configure the Host
                 IHost host = Host.CreateDefaultBuilder(args)
-                    .UseSystemd() // Enable systemd integration
-                    .UseSerilog() // Use Serilog for logging
-                    .ConfigureWebHostDefaults(webBuilder =>
-                    {
-                        webBuilder.ConfigureKestrel(serverOptions =>
-                        {
-                            // Configure Kestrel server options
-                            serverOptions.ListenAnyIP(5001, listenOptions =>
-                            {
-                                listenOptions.Protocols = HttpProtocols.Http2;
-                                // Optionally configure TLS when supported
-                                // listenOptions.UseHttps("path_to_certificate.pfx", "password");
-                            });
-                        });
-                        webBuilder.UseStartup<Startup>();
-                    })
+                    .UseSystemd()
+                    .UseSerilog()
+
                     .ConfigureServices((hostContext, services) =>
                     {
-                        // Bind configuration to GatewaySettings
+                        // Bind "GatewaySettings" section from appsettings
                         services.Configure<GatewaySettings>(configuration.GetSection("GatewaySettings"));
 
-                        // Register the Worker service
-                        services.AddHostedService<Worker>();
-
-                        // Register other services as needed
-                        services.AddHostedService<DeviceDiscoveryService>();
-
-                        services.AddSingleton<DeviceCommunicationService>();
                         services.AddSingleton<DeviceRepository>();
-                        services.AddSingleton<VersionRepository>();
-                        services.AddSingleton<LicenseValidationService>();
-                        services.AddSingleton<DataAggregationService>();
+
                         services.AddSingleton<CloudCommunicationService>();
+                        services.AddSingleton<AlertingService>();
+                        services.AddSingleton<DeviceCommunicationService>();
                         services.AddSingleton<UpdateManagementService>();
                         services.AddSingleton<LogCollectionService>();
                         services.AddSingleton<CommandExecutionService>();
-                        services.AddSingleton<VersionControlService>();
-                        services.AddSingleton<AlertingService>();
+
+                        services.AddHostedService<Worker>();
+                        services.AddHostedService<DeviceDiscoveryService>();
+                    })
+
+                    // Configure the Kestrel-based gRPC server
+                    .ConfigureWebHostDefaults(webBuilder =>
+                    {
+                        // Kestrel server on port 5001 with TLS
+                        webBuilder.ConfigureKestrel(serverOptions =>
+                        {
+                            // explicitly telling kestrel to allow 200 MB for the package size
+                            serverOptions.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
+
+                            serverOptions.ListenAnyIP(gatewayGrpcPort, listenOptions =>
+                            {
+                                listenOptions.Protocols = HttpProtocols.Http2;
+                            });
+                        });
+                        webBuilder.UseStartup<Startup>();
                     })
                     .Build();
 
@@ -104,11 +88,12 @@ namespace UpFlux.Gateway.Server
             }
             catch (Exception ex)
             {
+                // Fatal error
                 Log.Fatal(ex, "UpFlux Gateway Server terminated unexpectedly");
             }
             finally
             {
-                // Flush and close logs.
+                // Flush Serilog
                 Log.CloseAndFlush();
             }
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -20,8 +21,6 @@ namespace UpFlux.Update.Service.Services
         private readonly Configuration _config;
         private TcpListener _tcpListener;
         private bool _isListening;
-        private readonly X509Certificate2 _clientCertificate;
-        private readonly X509Certificate2 _trustedCaCertificate;
         private readonly RollbackService _rollbackService;
         private readonly VersionManager _versionManager;
 
@@ -29,12 +28,6 @@ namespace UpFlux.Update.Service.Services
         {
             _logger = logger;
             _config = configOptions.Value;
-
-            // Load client certificate
-            _clientCertificate = new X509Certificate2(_config.CertificatePath, _config.CertificatePassword);
-
-            // Load trusted CA certificate
-            _trustedCaCertificate = new X509Certificate2(_config.TrustedCaCertificatePath);
 
             // Ensure the incoming directory exists
             Directory.CreateDirectory(_config.IncomingPackageDirectory);
@@ -73,31 +66,45 @@ namespace UpFlux.Update.Service.Services
             {
                 using NetworkStream networkStream = client.GetStream();
 
-                using SslStream sslStream = new SslStream(
-                    networkStream,
-                    false,
-                    ValidateServerCertificate,
-                    SelectLocalCertificate);
+                _logger.LogInformation("Connection established with the Gateway Server.");
 
-                // Authenticate as client
-                await sslStream.AuthenticateAsClientAsync(
-                    _config.GatewayServerIp,
-                    new X509CertificateCollection { _clientCertificate },
-                    System.Security.Authentication.SslProtocols.Tls13,
-                    checkCertificateRevocation: false);
+                string command = await ReadMessageAsync(networkStream);
+                if (string.IsNullOrEmpty(command))
+                {
+                    _logger.LogInformation("No command received. Closing connection.");
+                    return;
+                }
 
-                _logger.LogInformation("Secure connection established with the Gateway Server.");
+                _logger.LogInformation("Received command: {command}", command);
 
-                // Send Device UUID to the Gateway Server
-                string uuidMessage = $"{_config.DeviceUuid}\n";
-                byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
-                await sslStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
-                await sslStream.FlushAsync();
+                if (command.StartsWith("SEND_PACKAGE"))
+                {
+                    await ReceivePackageAsync(networkStream, command);
+                }
+                else if (command.StartsWith("LICENSE"))
+                {
+                    string license = command.Substring("LICENSE:".Length).Trim();
+                    StoreLicense(license);
+                }
+                else if (command == "REQUEST_LOGS")
+                {
+                    await SendLogsAsync(networkStream);
+                }
+                else if (command.StartsWith("ROLLBACK:"))
+                {
+                    string version = command.Substring("ROLLBACK:".Length).Trim();
+                    await HandleRollbackCommandAsync(networkStream, version);
+                }
+                else if (command == "GET_VERSIONS")
+                {
+                    await HandleGetVersionsCommandAsync(networkStream);
+                }
+                else
+                {
+                    _logger.LogWarning("Unknown command received: {command}", command);
+                }
 
-                _logger.LogInformation("Device UUID sent to Gateway Server: {uuid}", _config.DeviceUuid);
-
-                // Receive commands from the Gateway Server
-                await ReceiveCommandsAsync(sslStream);
+                _logger.LogInformation("Done handling {command}. Closing connection.", command);
             }
             catch (Exception ex)
             {
@@ -109,61 +116,7 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        private async Task ReceiveCommandsAsync(SslStream sslStream)
-        {
-            try
-            {
-                while (true)
-                {
-                    string command = await ReadMessageAsync(sslStream);
-                    if (string.IsNullOrEmpty(command))
-                    {
-                        _logger.LogInformation("No command received. Closing connection.");
-                        break;
-                    }
-
-                    _logger.LogInformation("Received command: {command}", command);
-
-                    if (command.StartsWith("SEND_PACKAGE"))
-                    {
-                        // Handle receiving the package
-                        await ReceivePackageAsync(sslStream, command);
-                    }
-                    else if (command.StartsWith("LICENSE"))
-                    {
-                        // Handle the license
-                        string license = command.Substring("LICENSE:".Length).Trim();
-                        StoreLicense(license);
-                    }
-                    else if (command == "REQUEST_LOGS")
-                    {
-                        // Send logs to the Gateway Server
-                        await SendLogsAsync(sslStream);
-                    }
-                    else if (command.StartsWith("ROLLBACK:"))
-                    {
-                        // Handle rollback command
-                        string version = command.Substring("ROLLBACK:".Length).Trim();
-                        await HandleRollbackCommandAsync(sslStream, version);
-                    }
-                    else if (command == "GET_VERSIONS")
-                    {
-                        // Handle GET_VERSIONS command
-                        await HandleGetVersionsCommandAsync(sslStream);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Unknown command received: {command}", command);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error receiving commands from Gateway Server.");
-            }
-        }
-
-        private async Task ReceivePackageAsync(SslStream sslStream, string command)
+        private async Task ReceivePackageAsync(NetworkStream networkStream, string command)
         {
             try
             {
@@ -184,21 +137,22 @@ namespace UpFlux.Update.Service.Services
                     return;
                 }
 
-                // Generate the destination path
-                string destinationPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+                // write to .partial in the incoming directory
+                string finalPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+                string partialPath = finalPath + ".partial";
 
                 // Send acknowledgment
                 string ackMessage = "READY_FOR_PACKAGE\n";
                 byte[] ackBytes = Encoding.UTF8.GetBytes(ackMessage);
-                await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(ackBytes, 0, ackBytes.Length);
+                await networkStream.FlushAsync();
 
                 // Read the length of the package (as 4-byte integer)
                 byte[] lengthBytes = new byte[4];
                 int totalBytesRead = 0;
                 while (totalBytesRead < 4)
                 {
-                    int bytesRead = await sslStream.ReadAsync(lengthBytes, totalBytesRead, 4 - totalBytesRead);
+                    int bytesRead = await networkStream.ReadAsync(lengthBytes, totalBytesRead, 4 - totalBytesRead);
                     if (bytesRead == 0)
                     {
                         throw new Exception("Gateway Server closed the connection unexpectedly.");
@@ -215,7 +169,7 @@ namespace UpFlux.Update.Service.Services
                 totalBytesRead = 0;
                 while (totalBytesRead < packageLength)
                 {
-                    int bytesRead = await sslStream.ReadAsync(packageData, totalBytesRead, packageLength - totalBytesRead);
+                    int bytesRead = await networkStream.ReadAsync(packageData, totalBytesRead, packageLength - totalBytesRead);
                     if (bytesRead == 0)
                     {
                         throw new Exception("Gateway Server closed the connection unexpectedly.");
@@ -224,9 +178,16 @@ namespace UpFlux.Update.Service.Services
                 }
 
                 // Save the package data to a file
-                await File.WriteAllBytesAsync(destinationPath, packageData);
+                await File.WriteAllBytesAsync(partialPath, packageData);
 
-                _logger.LogInformation("Package '{fileName}' received and saved to '{path}'.", fileName, destinationPath);
+                // rename the .partial to the final .deb
+                if (File.Exists(finalPath))
+                {
+                    File.Delete(finalPath);
+                }
+                File.Move(partialPath, finalPath);
+
+                _logger.LogInformation("Package '{fileName}' fully written and renamed to '{finalPath}'.", fileName, finalPath);
             }
             catch (Exception ex)
             {
@@ -235,7 +196,7 @@ namespace UpFlux.Update.Service.Services
         }
 
         // Helper method to read a message terminated by a newline character
-        private async Task<string> ReadMessageAsync(SslStream sslStream)
+        private async Task<string> ReadMessageAsync(NetworkStream networkStream)
         {
             StringBuilder messageData = new StringBuilder();
             byte[] buffer = new byte[1024];
@@ -243,7 +204,7 @@ namespace UpFlux.Update.Service.Services
 
             do
             {
-                bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length);
                 if (bytesRead == 0)
                 {
                     break;
@@ -289,30 +250,6 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        private bool ValidateServerCertificate(
-            object sender,
-            X509Certificate certificate,
-            X509Chain chain,
-            SslPolicyErrors sslPolicyErrors)
-        {
-            // Validate server certificate against trusted CA
-            if (sslPolicyErrors == SslPolicyErrors.None)
-                return true;
-
-            _logger.LogWarning("Server certificate validation failed: {errors}", sslPolicyErrors);
-            return false;
-        }
-
-        private X509Certificate SelectLocalCertificate(
-            object sender,
-            string targetHost,
-            X509CertificateCollection localCertificates,
-            X509Certificate remoteCertificate,
-            string[] acceptableIssuers)
-        {
-            return _clientCertificate;
-        }
-
         public void StopListening()
         {
             _isListening = false;
@@ -324,61 +261,58 @@ namespace UpFlux.Update.Service.Services
         /// </summary>
         /// <param name="sslStream">The SSL stream to send logs over.</param>
         /// <returns> Returns a Task representing the asynchronous operation.</returns>
-        private async Task SendLogsAsync(SslStream sslStream)
+        private async Task SendLogsAsync(NetworkStream networkStream)
         {
             try
             {
-                string updateServiceLogPath = _config.UpdateServiceLog;
-                string monitoringServiceLogPath = _config.MonitoringServiceLog;
+                string logsDir = _config.UpfluxLogPath;
 
-                if (!File.Exists(updateServiceLogPath) && !File.Exists(monitoringServiceLogPath))
+                if (!Directory.Exists(logsDir))
                 {
-                    _logger.LogWarning("No log files found to send.");
+                    _logger.LogWarning("Logs directory '{dir}' does not exist. Sending fileCount=0.", logsDir);
+
+                    // Send fileCount=0
+                    byte[] zeroCount = BitConverter.GetBytes(0);
+                    await networkStream.WriteAsync(zeroCount, 0, zeroCount.Length);
+                    await networkStream.FlushAsync();
+                    _logger.LogInformation("Logs directory not found. Sent fileCount=0.");
                     return;
                 }
 
-                // Prepare a list of logs to send
-                var logsToSend = new List<(string FileName, string FilePath)>();
+                string zipName = $"upflux-logs.zip";
+                string zipFilePath = Path.Combine("/tmp", zipName);
 
-                if (File.Exists(updateServiceLogPath))
+                // Delete the old zip incase it exists
+                if (File.Exists(zipFilePath))
                 {
-                    logsToSend.Add(("UpdateServiceLog.log", updateServiceLogPath));
+                    File.Delete(zipFilePath);
                 }
 
-                if (File.Exists(monitoringServiceLogPath))
-                {
-                    logsToSend.Add(("MonitoringServiceLog.log", monitoringServiceLogPath));
-                }
+                ZipFile.CreateFromDirectory(logsDir, zipFilePath);
 
-                // Send the number of log files
-                byte[] fileCountBytes = BitConverter.GetBytes(logsToSend.Count);
-                await sslStream.WriteAsync(fileCountBytes, 0, fileCountBytes.Length);
-                await sslStream.FlushAsync();
+                int fileCount = 1;
+                byte[] fileCountBytes = BitConverter.GetBytes(fileCount);
+                await networkStream.WriteAsync(fileCountBytes, 0, fileCountBytes.Length);
+                await networkStream.FlushAsync();
 
-                foreach (var log in logsToSend)
-                {
-                    // Send the file name length and file name
-                    byte[] fileNameBytes = Encoding.UTF8.GetBytes(log.FileName);
-                    byte[] fileNameLengthBytes = BitConverter.GetBytes(fileNameBytes.Length);
-                    await sslStream.WriteAsync(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
-                    await sslStream.WriteAsync(fileNameBytes, 0, fileNameBytes.Length);
-                    await sslStream.FlushAsync();
+                // Prepare the zip file name
+                byte[] fileNameBytes = Encoding.UTF8.GetBytes(zipName);
+                byte[] fileNameLenBytes = BitConverter.GetBytes(fileNameBytes.Length);
+                await networkStream.WriteAsync(fileNameLenBytes, 0, fileNameLenBytes.Length);
+                await networkStream.WriteAsync(fileNameBytes, 0, fileNameBytes.Length);
+                await networkStream.FlushAsync();
 
-                    // Read the file data
-                    byte[] logBytes = File.ReadAllBytes(log.FilePath);
-                    int logLength = logBytes.Length;
+                // Read the zip data and send
+                byte[] zipData = File.ReadAllBytes(zipFilePath);
+                int zipLength = zipData.Length;
+                byte[] zipLenBytes = BitConverter.GetBytes(zipLength);
+                await networkStream.WriteAsync(zipLenBytes, 0, zipLenBytes.Length);
 
-                    // Send the length of the log file (as 4-byte integer)
-                    byte[] lengthBytes = BitConverter.GetBytes(logLength);
-                    await sslStream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
-                    await sslStream.FlushAsync();
+                // Write the actual zip file
+                await networkStream.WriteAsync(zipData, 0, zipData.Length);
+                await networkStream.FlushAsync();
 
-                    // Send the log file data
-                    await sslStream.WriteAsync(logBytes, 0, logBytes.Length);
-                    await sslStream.FlushAsync();
-                }
-
-                _logger.LogInformation("Logs sent to Gateway Server successfully.");
+                _logger.LogInformation("Logs from '{logsDir}' zipped to '{zipFilePath}' and sent to Gateway.", logsDir, zipFilePath);
             }
             catch (Exception ex)
             {
@@ -399,32 +333,23 @@ namespace UpFlux.Update.Service.Services
                 await client.ConnectAsync(_config.GatewayServerIp, _config.GatewayServerPort);
 
                 using NetworkStream networkStream = client.GetStream();
-                using SslStream sslStream = new SslStream(
-                    networkStream,
-                    false,
-                    ValidateServerCertificate,
-                    SelectLocalCertificate);
 
-                // Authenticate as client
-                await sslStream.AuthenticateAsClientAsync(
-                    _config.GatewayServerIp,
-                    new X509CertificateCollection { _clientCertificate },
-                    System.Security.Authentication.SslProtocols.Tls13,
-                    checkCertificateRevocation: false);
-
-                _logger.LogInformation("Secure connection established with the Gateway Server for notification.");
+                _logger.LogInformation("Connection established with the Gateway Server for notification.");
 
                 // Send Device UUID to the Gateway Server
-                string uuidMessage = $"{_config.DeviceUuid}\n";
+                string uuidMessage = $"UUID:{_config.DeviceUuid}\n";
                 byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
-                await sslStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                await networkStream.FlushAsync();
+
+                // Wait for a short time before sending so that the server can process the UUID
+                await Task.Delay(100);
 
                 // Send the notification message
                 string notificationMessage = $"NOTIFICATION:{message}\n";
                 byte[] messageBytes = Encoding.UTF8.GetBytes(notificationMessage);
-                await sslStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                await networkStream.FlushAsync();
 
                 _logger.LogInformation("Notification sent to Gateway Server: {message}", message);
             }
@@ -434,7 +359,7 @@ namespace UpFlux.Update.Service.Services
             }
         }
 
-        private async Task HandleRollbackCommandAsync(SslStream sslStream, string version)
+        private async Task HandleRollbackCommandAsync(NetworkStream networkStream, string version)
         {
             try
             {
@@ -443,8 +368,8 @@ namespace UpFlux.Update.Service.Services
                 // Send acknowledgment
                 string ackMessage = "ROLLBACK_INITIATED\n";
                 byte[] ackBytes = Encoding.UTF8.GetBytes(ackMessage);
-                await sslStream.WriteAsync(ackBytes, 0, ackBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(ackBytes, 0, ackBytes.Length);
+                await networkStream.FlushAsync();
 
                 // Perform rollback
                 bool rollbackResult = await _rollbackService.ManualRollbackAsync(version);
@@ -456,8 +381,8 @@ namespace UpFlux.Update.Service.Services
                     // Send confirmation
                     string confirmationMessage = "ROLLBACK_COMPLETED\n";
                     byte[] confirmationBytes = Encoding.UTF8.GetBytes(confirmationMessage);
-                    await sslStream.WriteAsync(confirmationBytes, 0, confirmationBytes.Length);
-                    await sslStream.FlushAsync();
+                    await networkStream.WriteAsync(confirmationBytes, 0, confirmationBytes.Length);
+                    await networkStream.FlushAsync();
 
                     // Send a notification back to the Gateway Server
                     await SendNotificationAsync($"Rollback to version {version} completed successfully.");
@@ -469,8 +394,8 @@ namespace UpFlux.Update.Service.Services
                     // Send failure message
                     string failureMessage = "ROLLBACK_FAILED\n";
                     byte[] failureBytes = Encoding.UTF8.GetBytes(failureMessage);
-                    await sslStream.WriteAsync(failureBytes, 0, failureBytes.Length);
-                    await sslStream.FlushAsync();
+                    await networkStream.WriteAsync(failureBytes, 0, failureBytes.Length);
+                    await networkStream.FlushAsync();
 
                     // Send a notification back to the Gateway Server
                     await SendNotificationAsync($"Rollback to version {version} failed.");
@@ -483,27 +408,27 @@ namespace UpFlux.Update.Service.Services
                 // Send failure message
                 string failureMessage = "ROLLBACK_FAILED\n";
                 byte[] failureBytes = Encoding.UTF8.GetBytes(failureMessage);
-                await sslStream.WriteAsync(failureBytes, 0, failureBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(failureBytes, 0, failureBytes.Length);
+                await networkStream.FlushAsync();
             }
         }
 
-        private async Task HandleGetVersionsCommandAsync(SslStream sslStream)
+        private async Task HandleGetVersionsCommandAsync(NetworkStream networkStream)
         {
             try
             {
                 _logger.LogInformation("Handling GET_VERSIONS command.");
 
                 // Get the current installed version and list of available versions
-                object versionInfo = _versionManager.GetVersionInfo();
+                FullVersionInfo versionInfo = _versionManager.GetFullVersionInfo();
 
                 // Serialize versionInfo to JSON
                 string versionInfoJson = JsonConvert.SerializeObject(versionInfo);
 
                 // Send the JSON string to the Gateway Server
                 byte[] versionInfoBytes = Encoding.UTF8.GetBytes(versionInfoJson + "\n");
-                await sslStream.WriteAsync(versionInfoBytes, 0, versionInfoBytes.Length);
-                await sslStream.FlushAsync();
+                await networkStream.WriteAsync(versionInfoBytes, 0, versionInfoBytes.Length);
+                await networkStream.FlushAsync();
 
                 _logger.LogInformation("Version information sent to Gateway Server.");
             }

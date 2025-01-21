@@ -18,7 +18,13 @@ namespace UpFlux.Gateway.Server
         public void ConfigureServices(IServiceCollection services)
         {
             // Add gRPC services
-            services.AddGrpc();
+            //services.AddGrpc();
+            services.AddGrpc(options =>
+            {
+                // 200 MB
+                options.MaxReceiveMessageSize = 200 * 1024 * 1024;
+                options.MaxSendMessageSize = 200 * 1024 * 1024;
+            });
         }
 
         /// <summary>

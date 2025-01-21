@@ -52,9 +52,24 @@ namespace UpFlux.Gateway.Server.Models
         public int LicenseCheckIntervalMinutes { get; set; } = 60;
 
         /// <summary>
+        /// Gets or sets the IP address of the Gateway Server.
+        /// </summary>
+        public string GatewayServerIp { get; set; }
+
+        /// <summary>
         /// Gets or sets the TCP port on which the Gateway Server listens for device connections.
         /// </summary>
-        public int TcpPort { get; set; } = 5000;
+        public int GatewayTcpPort { get; set; } = 5000;
+
+        /// <summary>
+        /// Gets or sets the gRPC port on which the Gateway Server listens for grpc connections with the cloud.
+        /// </summary>
+        public int GatewayGrpcPort { get; set; } = 5001;
+
+        /// <summary>
+        /// Gets or sets the TCP port on which the device listens for Gateway connections.
+        /// </summary>
+        public int DeviceTcpPort { get; set; } = 6000;
 
         /// <summary>
         /// Gets or sets the interval in seconds for data aggregation.
@@ -81,6 +96,11 @@ namespace UpFlux.Gateway.Server.Models
         /// Gets or sets the directory path for storing update packages.
         /// </summary>
         public string UpdatePackageDirectory { get; set; }
+
+        /// <summary>
+        /// The Network Interface to use by gateway to speak with devices
+        /// </summary>
+        public string DeviceNetworkInterface { get; set; }
     }
 }
 
