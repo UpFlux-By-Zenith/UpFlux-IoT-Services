@@ -137,8 +137,9 @@ namespace UpFlux.Update.Service.Services
                     return;
                 }
 
-                // Generate the destination path
-                string destinationPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+                // write to .partial in the incoming directory
+                string finalPath = Path.Combine(_config.IncomingPackageDirectory, fileName);
+                string partialPath = finalPath + ".partial";
 
                 // Send acknowledgment
                 string ackMessage = "READY_FOR_PACKAGE\n";
@@ -177,9 +178,16 @@ namespace UpFlux.Update.Service.Services
                 }
 
                 // Save the package data to a file
-                await File.WriteAllBytesAsync(destinationPath, packageData);
+                await File.WriteAllBytesAsync(partialPath, packageData);
 
-                _logger.LogInformation("Package '{fileName}' received and saved to '{path}'.", fileName, destinationPath);
+                // rename the .partial to the final .deb
+                if (File.Exists(finalPath))
+                {
+                    File.Delete(finalPath);
+                }
+                File.Move(partialPath, finalPath);
+
+                _logger.LogInformation("Package '{fileName}' fully written and renamed to '{finalPath}'.", fileName, finalPath);
             }
             catch (Exception ex)
             {
