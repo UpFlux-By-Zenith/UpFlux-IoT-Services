@@ -51,6 +51,11 @@ namespace UpFlux.Gateway.Server.Services
 
             foreach (Device dev in devices)
             {
+                if(dev.UUID == null)
+                {
+                    continue;
+                }
+
                 // Retrieve the FullVersionInfo object from the device
                 FullVersionInfo info = await _deviceCommunicationService.RequestVersionInfoAsync(dev);
                 if (info == null)

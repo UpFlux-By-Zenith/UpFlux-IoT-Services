@@ -98,8 +98,8 @@ namespace UpFlux.Cloud.Simulator
             string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-            ConsoleSync.Write("Enter rollback parameter (e.g. version=1.2.3): ");
-            string param = ConsoleSync.ReadLine() ?? "version=1.0.0";
+            ConsoleSync.Write("Enter rollback version (e.g. 1.2.3): ");
+            string param = ConsoleSync.ReadLine() ?? "1.0.0";
 
             using GrpcChannel channel = CreateGatewayChannel();
             CommandService.CommandServiceClient commandClient = new CommandService.CommandServiceClient(channel);
