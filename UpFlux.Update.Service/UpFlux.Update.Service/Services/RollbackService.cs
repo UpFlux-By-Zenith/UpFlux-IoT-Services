@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using UpFlux.Update.Service.Models;
+using UpFlux.Update.Service.Utilities;
 
 namespace UpFlux.Update.Service.Services
 {
@@ -16,11 +17,13 @@ namespace UpFlux.Update.Service.Services
     {
         private readonly ILogger<RollbackService> _logger;
         private readonly InstallationService _installationService;
+        private readonly VersionManager _versionManager;
 
-        public RollbackService(ILogger<RollbackService> logger, InstallationService installationService)
+        public RollbackService(ILogger<RollbackService> logger, InstallationService installationService, VersionManager versionManager)
         {
             _logger = logger;
             _installationService = installationService;
+            _versionManager = versionManager;
         }
 
         /// <summary>
@@ -84,5 +87,39 @@ namespace UpFlux.Update.Service.Services
                 return false;
             }
         }
+
+        public async Task<bool> ManualRollbackAsync(string targetVersion)
+        {
+            _logger.LogInformation("Starting rollback to version {version}.", targetVersion);
+
+            // Get the package for the specified version
+            UpdatePackage targetPackage = _versionManager.GetPackageByVersion(targetVersion);
+
+            if (targetPackage == null)
+            {
+                _logger.LogError("Package for version {version} not found.", targetVersion);
+                return false;
+            }
+
+            // Uninstall current version
+            bool uninstallResult = await UninstallCurrentVersionAsync();
+            if (!uninstallResult)
+            {
+                _logger.LogError("Rollback failed during uninstallation.");
+                return false;
+            }
+
+            // Install target version
+            bool installResult = await _installationService.InstallPackageAsync(targetPackage);
+            if (!installResult)
+            {
+                _logger.LogError("Rollback failed during installation of version {version}.", targetVersion);
+                return false;
+            }
+
+            _logger.LogInformation("Rollback to version {version} successful.", targetVersion);
+            return true;
+        }
+
     }
 }

@@ -39,6 +39,18 @@ namespace UpFlux.Monitoring.Service
         /// The primary network interface to monitor
         /// </summary>
         public string NetworkInterface { get; set; } = "eth0";
+
+        /// <summary>
+        /// The UUID of the device
+        /// </summary>
+        [Required]
+        public string DeviceUuid { get; set; }
+
+        /// <summary>
+        /// The path to store the license file
+        /// </summary>
+        [Required]
+        public string LicenseFilePath { get; set; }
     }
 }
 

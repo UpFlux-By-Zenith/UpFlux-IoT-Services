@@ -30,71 +30,46 @@ namespace UpFlux.Update.Service.Services
             _logger.LogInformation("File Watcher started.");
             _watcher = new FileSystemWatcher(_config.IncomingPackageDirectory, _config.PackageNamePattern)
             {
-                EnableRaisingEvents = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime
             };
-            _watcher.Created += OnPackageCreated;
+            _watcher.Created += OnPackageCreatedOrRenamed;
+            _watcher.Renamed += OnPackageCreatedOrRenamed;
+
+            _watcher.EnableRaisingEvents = true;
         }
 
-        private void OnPackageCreated(object sender, FileSystemEventArgs e)
+        private void OnPackageCreatedOrRenamed(object sender, FileSystemEventArgs e)
         {
             _logger.LogInformation($"New package detected in incoming directory: {e.FullPath}");
 
-            // Wait until the file is accessible
-            if (WaitForFile(e.FullPath))
+            try
             {
+                // Copy into packages dir
                 string destinationPath = Path.Combine(_config.PackageDirectory, Path.GetFileName(e.FullPath));
 
-                // Copy the package to the PackageDirectory
-                try
-                {
-                    File.Copy(e.FullPath, destinationPath, true);
-                    _logger.LogInformation($"Package copied to packages directory: {destinationPath}");
+                File.Copy(e.FullPath, destinationPath, overwrite: true);
+                _logger.LogInformation("Package copied to packages directory: {dest}", destinationPath);
 
-                    // Delete the original file from incoming directory
-                    File.Delete(e.FullPath);
+                // remove from incoming
+                File.Delete(e.FullPath);
 
-                    UpdatePackage package = new UpdatePackage
-                    {
-                        FilePath = destinationPath,
-                        Version = ExtractVersionFromFileName(Path.GetFileName(e.FullPath))
-                    };
-                    PackageDetected?.Invoke(this, package);
-                }
-                catch (IOException ex)
+                UpdatePackage package = new UpdatePackage
                 {
-                    _logger.LogError(ex, $"Failed to copy package to packages directory: {e.FullPath}");
-                }
+                    FilePath = destinationPath,
+                    Version = ExtractVersionFromFileName(Path.GetFileName(e.FullPath))
+                };
+
+                // Raise event
+                PackageDetected?.Invoke(this, package);
             }
-            else
+            catch (IOException ex)
             {
-                _logger.LogError($"Failed to access the file: {e.FullPath}");
+                _logger.LogError(ex, "Failed to copy package to packages directory: {path}", e.FullPath);
             }
-        }
-
-        private bool WaitForFile(string filePath)
-        {
-            const int maxAttempts = 10;
-            const int delayMilliseconds = 500;
-
-            for (int i = 0; i < maxAttempts; i++)
+            catch (Exception ex)
             {
-                try
-                {
-                    using (FileStream stream = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
-                    {
-                        if (stream.Length > 0)
-                        {
-                            return true;
-                        }
-                    }
-                }
-                catch (IOException)
-                {
-                    Thread.Sleep(delayMilliseconds);
-                }
+                _logger.LogError(ex, "Unexpected error in OnPackageCreatedOrRenamed.");
             }
-            return false;
         }
 
         public void StopWatching()

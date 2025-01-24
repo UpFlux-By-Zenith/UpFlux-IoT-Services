@@ -22,6 +22,7 @@ namespace UpFlux.Update.Service
             IConfigurationRoot configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .AddEnvironmentVariables() // Include environment variables
                 .Build();
 
             // Configure Serilog
@@ -59,6 +60,7 @@ namespace UpFlux.Update.Service
 
                     // Register services
                     services.AddHostedService<UpdateService>();
+
                     services.AddSingleton<TcpListenerService>();
                     services.AddSingleton<FileWatcherService>();
                     services.AddSingleton<VersionManager>();
@@ -66,7 +68,6 @@ namespace UpFlux.Update.Service
                     services.AddSingleton<InstallationService>();
                     services.AddSingleton<LogMonitoringService>();
                     services.AddSingleton<RollbackService>();
-                    services.AddSingleton<GatewayNotificationService>();
                 });
     }
 }

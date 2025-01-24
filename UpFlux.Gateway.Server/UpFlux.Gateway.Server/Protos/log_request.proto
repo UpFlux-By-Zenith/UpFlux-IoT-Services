@@ -1,0 +1,18 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+package logrequest;
+
+service LogRequestService {
+  rpc RequestDeviceLogs (LogRequest) returns (LogResponse);
+}
+
+message LogRequest {
+  repeated string deviceUuids = 1;
+}
+
+message LogResponse {
+  bool success = 1;
+  string message = 2;
+}

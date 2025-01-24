@@ -1,0 +1,35 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+import "google/protobuf/timestamp.proto";
+
+package license;
+
+// Service definition for license operations
+service LicenseService {
+  rpc RegisterDevice (DeviceRegistrationRequest) returns (DeviceRegistrationResponse);
+  rpc RenewLicense (LicenseRenewalRequest) returns (LicenseRenewalResponse);
+}
+
+// Message definitions
+
+message DeviceRegistrationRequest {
+  string uuid = 1;
+}
+
+message DeviceRegistrationResponse {
+  bool approved = 1;
+  string license = 2;
+  google.protobuf.Timestamp expirationDate = 3;
+}
+
+message LicenseRenewalRequest {
+  string uuid = 1;
+}
+
+message LicenseRenewalResponse {
+  bool approved = 1;
+  string license = 2;
+  google.protobuf.Timestamp expirationDate = 3;
+}

@@ -1,0 +1,50 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+package monitoring;
+
+import "google/protobuf/timestamp.proto";
+
+// Service definition for monitoring data transmission
+service MonitoringService {
+  rpc SendAggregatedData (AggregatedDataRequest) returns (AggregatedDataResponse);
+}
+
+// Message definitions
+
+message AggregatedDataRequest {
+  repeated AggregatedData aggregatedDataList = 1;
+}
+
+message AggregatedDataResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message AggregatedData {
+  string uuid = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  Metrics metrics = 3;
+  SensorData sensorData = 4;
+}
+
+message Metrics {
+  double cpuUsage = 1;
+  double memoryUsage = 2;
+  double diskUsage = 3;
+  NetworkUsage networkUsage = 4;
+  double cpuTemperature = 5;
+  double systemUptime = 6;
+}
+
+message NetworkUsage {
+  int64 bytesSent = 1;
+  int64 bytesReceived = 2;
+}
+
+message SensorData {
+  int32 redValue = 1;
+  int32 greenValue = 2;
+  int32 blueValue = 3;
+}
