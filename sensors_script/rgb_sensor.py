@@ -1,10 +1,9 @@
 """
-module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECT RED
+module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECTS WHITE
 """
 import RPi.GPIO as GPIO
 import time
 import logging
-import json
 
 LOG_FILE = '/var/log/upflux/upflux-sensors.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, 
@@ -16,12 +15,14 @@ OE_PIN = 14
 OUT_PIN = 22
 S2_PIN = 17
 S3_PIN = 27
-BUZZER_PIN = 7
+BUZZER_PIN = 25
+LED_PIN = 24 
+
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
-GREEN_THRESHOLD = 60
-BLUE_THRESHOLD = 70
+GREEN_THRESHOLD = 200
+BLUE_THRESHOLD = 200
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
 FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
@@ -39,19 +40,19 @@ class ColorSensor:
         GPIO.setup(S2_PIN, GPIO.OUT)
         GPIO.setup(S3_PIN, GPIO.OUT)
         GPIO.setup(OE_PIN, GPIO.OUT)
+        GPIO.setup(LED_PIN, GPIO.OUT)
         
         GPIO.output(OE_PIN, GPIO.LOW)
         GPIO.output(S0_PIN, GPIO.HIGH)
         GPIO.output(S1_PIN, GPIO.LOW)
+        GPIO.output(LED_PIN, GPIO.HIGH)  
         GPIO.setup(BUZZER_PIN, GPIO.OUT)
 
         global pwm
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        if not ( green_value <= GREEN_THRESHOLD and blue_value <= BLUE_THRESHOLD and red_value > 200):
-           return True  
-        return False 
+        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
 
     def activate_buzzer(self):
         pwm.start(50)  
@@ -97,33 +98,20 @@ class ColorSensor:
             try:
                 red_freq = self.measure_color_frequency('red')
                 red_value = self.map_frequency_to_rgb(red_freq, 'red')
-                #print(f"Red frequency: {red_freq} Hz -> RGB value: {red_value}")
+                print(f"Red frequency: {red_freq} Hz -> RGB value: {red_value}")
 
                 blue_freq = self.measure_color_frequency('blue')
                 blue_value = self.map_frequency_to_rgb(blue_freq, 'blue')
-                #print(f"Blue frequency: {blue_freq} Hz -> RGB value: {blue_value}")
+                print(f"Blue frequency: {blue_freq} Hz -> RGB value: {blue_value}")
 
                 green_freq = self.measure_color_frequency('green')
                 green_value = self.map_frequency_to_rgb(green_freq, 'green')
-                #print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
+                print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
 
-                #print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
-                
-                # Create a dictionary with the RGB values
-                sensor_data = {
-                    "red_value": red_value,
-                    "green_value": green_value,
-                    "blue_value": blue_value
-                }
-
-                # Output the JSON-formatted sensor data
-                print(json.dumps(sensor_data), flush=True)
-
-                # Log the sensor data if needed
-                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
+                print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
 
                 if self.buzzer_condition(red_value, green_value, blue_value):
-                    #print("Buzzer activated")
+                    print("Buzzer activated")
                     logging.error(
                         f"buzzer activated due to Invalid Color"
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
@@ -139,6 +127,7 @@ class ColorSensor:
                 time.sleep(1)
 
     def cleanup(self):
+        GPIO.output(LED_PIN, GPIO.LOW) 
         GPIO.cleanup()
         logging.info("RGB sensor shutdown")
 
