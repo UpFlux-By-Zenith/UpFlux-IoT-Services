@@ -13,27 +13,15 @@ namespace UpFlux.Gateway.Server.Models
     public class GatewaySettings
     {
         /// <summary>
+        /// Gets or sets the unique identifier of the gateway.
+        /// </summary>
+        public string GatewayId { get; set; }
+
+        /// <summary>
         /// Gets or sets the address of the cloud server to communicate with.
         /// </summary>
         [Required]
         public string CloudServerAddress { get; set; }
-
-        /// <summary>
-        /// Gets or sets the path to the Gateway Server's certificate file.
-        /// </summary>
-        [Required]
-        public string CertificatePath { get; set; }
-
-        /// <summary>
-        /// Gets or sets the password for the Gateway Server's certificate file.
-        /// </summary>
-        public string CertificatePassword { get; set; }
-
-        /// <summary>
-        /// Gets or sets the path to the trusted CA certificate file.
-        /// </summary>
-        [Required]
-        public string TrustedCaCertificatePath { get; set; }
 
         /// <summary>
         /// Gets or sets the connection string for the SQLite database.
@@ -60,11 +48,6 @@ namespace UpFlux.Gateway.Server.Models
         /// Gets or sets the TCP port on which the Gateway Server listens for device connections.
         /// </summary>
         public int GatewayTcpPort { get; set; } = 5000;
-
-        /// <summary>
-        /// Gets or sets the gRPC port on which the Gateway Server listens for grpc connections with the cloud.
-        /// </summary>
-        public int GatewayGrpcPort { get; set; } = 5001;
 
         /// <summary>
         /// Gets or sets the TCP port on which the device listens for Gateway connections.

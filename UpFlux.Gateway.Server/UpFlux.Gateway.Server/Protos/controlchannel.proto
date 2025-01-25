@@ -1,0 +1,183 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "UpFlux.Gateway.Server.Protos";
+
+package controlchannel;
+
+import "google/protobuf/timestamp.proto";
+
+// for single persistent bidirectional streaming RPC
+service ControlChannel {
+  // gateway connects, both Cloud and Gateway continuously exchange ControlMessage
+  rpc OpenControlChannel(stream ControlMessage) returns (stream ControlMessage);
+}
+
+message ControlMessage {
+  // Identifies teh sender: "CloudSim" or "Gateway-{UUID}"
+  string senderId = 1;
+
+  string description = 2;
+
+  oneof payload {
+    // License
+    LicenseRequest licenseRequest = 10;
+    LicenseResponse licenseResponse = 11;
+
+    // Command
+    CommandRequest commandRequest = 20;
+    CommandResponse commandResponse = 21;
+
+    // Logs
+    LogUpload logUpload = 30;
+    LogRequestMessage logRequest = 31;
+    LogResponseMessage logResponse = 32;
+
+    // Monitoring data
+    MonitoringDataMessage monitoringData = 40;
+
+    // Update
+    UpdatePackage updatePackage = 50;
+    UpdateAck updateAck = 51;
+
+    // Version data
+    VersionDataRequest versionDataRequest = 60;
+    VersionDataResponse versionDataResponse = 61;
+
+    // Alerts
+    AlertMessage alertMessage = 70;
+    AlertResponseMessage alertResponse = 71;
+  }
+}
+
+// ==================== LICENSE =====================
+message LicenseRequest {
+  // For registration or renewal 
+  string deviceUuid = 1;
+  bool isRenewal = 2;
+}
+
+message LicenseResponse {
+  string deviceUuid = 1;
+  bool approved = 2;
+  string license = 3;
+  google.protobuf.Timestamp expirationDate = 4;
+}
+
+// ==================== COMMANDS ====================
+message CommandRequest {
+  string commandId = 1;
+  CommandType commandType = 2;
+  string parameters = 3;
+  repeated string targetDevices = 4;
+}
+
+message CommandResponse {
+  string commandId = 1;
+  bool success = 2;
+  string details = 3;
+}
+
+enum CommandType {
+  COMMAND_TYPE_UNKNOWN = 0;
+  COMMAND_TYPE_ROLLBACK = 1;
+  // I will be adding more as needed
+}
+
+// ==================== LOGS ========================
+message LogUpload {
+  // The device uploading the logs
+  string deviceUuid = 1;
+  string fileName = 2;
+  bytes data = 3;
+}
+
+message LogRequestMessage {
+  repeated string deviceUuids = 1;
+}
+
+message LogResponseMessage {
+  bool success = 1;
+  string message = 2;
+  repeated string logFiles = 3;
+}
+
+// ==================== MONITORING ==================
+message MonitoringDataMessage {
+  repeated AggregatedData aggregatedData = 1;
+}
+
+message AggregatedData {
+  string uuid = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  Metrics metrics = 3;
+  SensorData sensorData = 4;
+}
+
+message Metrics {
+  double cpuUsage = 1;
+  double memoryUsage = 2;
+  double diskUsage = 3;
+  NetworkUsage networkUsage = 4;
+  double cpuTemperature = 5;
+  double systemUptime = 6;
+}
+
+message NetworkUsage {
+  int64 bytesSent = 1;
+  int64 bytesReceived = 2;
+}
+
+message SensorData {
+  int32 redValue = 1;
+  int32 greenValue = 2;
+  int32 blueValue = 3;
+}
+
+// ==================== UPDATE ======================
+message UpdatePackage {
+  string fileName = 1;           // .deb package name
+  bytes packageData = 2;         // The raw .deb 
+  repeated string targetDevices = 3;
+}
+
+message UpdateAck {
+  string fileName = 1;
+  bool success = 2;
+  string details = 3;
+}
+
+// ==================== VERSION DATA ================
+message VersionDataRequest {
+  // no fields, means "all devices"
+}
+
+message VersionDataResponse {
+  bool success = 1;
+  string message = 2;
+  repeated DeviceVersions deviceVersionsList = 3;
+}
+
+message DeviceVersions {
+  string deviceUuid = 1;
+  VersionInfo current = 2;
+  repeated VersionInfo available = 3;
+}
+
+message VersionInfo {
+  string version = 1;
+  google.protobuf.Timestamp installedAt = 2;
+}
+
+// ===================== ALERTS =====================
+message AlertMessage {
+  google.protobuf.Timestamp timestamp = 1;
+  string level = 2;
+  string message = 3;
+  string exception = 4;
+  string source = 5;
+}
+
+message AlertResponseMessage {
+  bool success = 1;
+  string message = 2;
+}

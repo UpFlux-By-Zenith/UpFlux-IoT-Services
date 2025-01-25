@@ -5,21 +5,35 @@ using System.Threading.Tasks;
 using Grpc.Net.Client;
 using Grpc.Core;
 using System.Net.Http;
-using UpFlux.Gateway.Server.Protos;
+using UpFlux.Cloud.Simulator.Protos;
 
 namespace UpFlux.Cloud.Simulator
 {
+    /// <summary>
+    /// A Console Menu that allows the user to trigger various 
+    /// actions (rollback, log requests, update packages, etc.) 
+    /// on connected gateways.
+    /// </summary>
     public class ConsoleMenu
     {
         private readonly IConfiguration _configuration;
         private readonly CloudSettings _cloudSettings;
+        private readonly ControlChannelService _controlSvc;
 
-        public ConsoleMenu(IConfiguration configuration)
+        /// <summary>
+        /// Creates a new instance of ConsoleMenu using dependencies 
+        /// injected from the host’s DI container.
+        /// </summary>
+        public ConsoleMenu(IConfiguration configuration, CloudSettings cloudSettings, ControlChannelService controlSvc)
         {
             _configuration = configuration;
-            _cloudSettings = configuration.GetSection("CloudSettings").Get<CloudSettings>();
+            _cloudSettings = cloudSettings;
+            _controlSvc = controlSvc;
         }
 
+        /// <summary>
+        /// Runs the interactive menu loop on the console, blocking until "Exit" is chosen.
+        /// </summary>
         public async Task RunMenuLoop()
         {
             while (true)
@@ -62,38 +76,15 @@ namespace UpFlux.Cloud.Simulator
             }
         }
 
-        private GrpcChannel CreateGatewayChannel()
-        {
-            // Build channel for connecting to the Gateway
-            //HttpClientHandler httpHandler = new HttpClientHandler();
-            //if (_cloudSettings.SkipServerCertificateValidation)
-            //{
-            //    httpHandler.ServerCertificateCustomValidationCallback =
-            //        (req, cert, chain, errors) => true;
-            //}
-
-            //GrpcChannel channel = GrpcChannel.ForAddress(
-            //    _cloudSettings.GatewayAddress,
-            //    new Grpc.Net.Client.GrpcChannelOptions { HttpHandler = httpHandler });
-
-            // Use HTTP for the gateway address
-            GrpcChannel channel = GrpcChannel.ForAddress(
-                _cloudSettings.GatewayAddress,
-                //new GrpcChannelOptions()
-                new GrpcChannelOptions
-                {
-                    // To Increase send and receive sizes in bytes
-                    // 200 MB:
-                    MaxSendMessageSize = 200 * 1024 * 1024,
-                    MaxReceiveMessageSize = 200 * 1024 * 1024
-                }
-            );
-
-            return channel;
-        }
-
+        /// <summary>
+        /// Demonstrates sending a ROLLBACK command to a specific gateway ID.
+        /// The user enters the gateway’s ID plus the target device(s).
+        /// </summary>
         private async Task MenuSendRollback()
         {
+            ConsoleSync.Write("Enter Gateway ID to send command to: ");
+            string gatewayId = (ConsoleSync.ReadLine() ?? "").Trim();
+
             ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
             string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -101,115 +92,73 @@ namespace UpFlux.Cloud.Simulator
             ConsoleSync.Write("Enter rollback version (e.g. 1.2.3): ");
             string param = ConsoleSync.ReadLine() ?? "1.0.0";
 
-            using GrpcChannel channel = CreateGatewayChannel();
-            CommandService.CommandServiceClient commandClient = new CommandService.CommandServiceClient(channel);
+            string cmdId = Guid.NewGuid().ToString();
+            await _controlSvc.SendCommandToGatewayAsync(
+                gatewayId,
+                cmdId,
+                CommandType.Rollback,
+                param,
+                uuids
+            );
 
-            CommandRequest request = new CommandRequest
-            {
-                CommandId = Guid.NewGuid().ToString(),
-                CommandType = CommandType.Rollback,
-                Parameters = param
-            };
-            request.TargetDevices.AddRange(uuids);
-
-            ConsoleSync.WriteLine($"Sending rollback command to the Gateway for {uuids.Length} device(s)...");
-            await commandClient.SendCommandAsync(request);
-            ConsoleSync.WriteLine("Rollback command sent.");
+            ConsoleSync.WriteLine($"Rollback command sent to gateway [{gatewayId}] for {uuids.Length} device(s).");
         }
 
+        /// <summary>
+        /// Demonstrates requesting logs from certain devices.
+        /// </summary>
         private async Task MenuRequestLogs()
         {
+            ConsoleSync.Write("Enter Gateway ID: ");
+            string gatewayId = (ConsoleSync.ReadLine() ?? "").Trim();
+
             ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
             string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-            using GrpcChannel channel = CreateGatewayChannel();
-            LogRequestService.LogRequestServiceClient logReqClient = new LogRequestService.LogRequestServiceClient(channel);
+            await _controlSvc.SendLogRequestAsync(gatewayId, uuids);
 
-            LogRequest request = new LogRequest();
-            request.DeviceUuids.AddRange(uuids);
-
-            ConsoleSync.WriteLine("Requesting logs from the Gateway...");
-            LogResponse response = await logReqClient.RequestDeviceLogsAsync(request);
-            ConsoleSync.WriteLine($"LogRequest result => success={response.Success}, message={response.Message}");
+            ConsoleSync.WriteLine($"Log request sent to gateway [{gatewayId}] for {uuids.Length} device(s).");
         }
 
+        /// <summary>
+        /// Demonstrates sending an update package to the gateway for the specified devices.
+        /// </summary>
         private async Task MenuSendUpdate()
         {
+            ConsoleSync.Write("Enter Gateway ID: ");
+            string gatewayId = (ConsoleSync.ReadLine() ?? "").Trim();
+
             ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
             string line = ConsoleSync.ReadLine() ?? "";
             string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
             ConsoleSync.Write("Path to .deb package: ");
             string packagePath = ConsoleSync.ReadLine() ?? "";
-            if (!File.Exists(packagePath))
+            if (!System.IO.File.Exists(packagePath))
             {
                 ConsoleSync.WriteLine("File not found. Aborting.");
                 return;
             }
-            string fileName = Path.GetFileName(packagePath);
 
-            // read bytes
-            byte[] packageData = await File.ReadAllBytesAsync(packagePath);
+            string fileName = System.IO.Path.GetFileName(packagePath);
+            byte[] packageData = await System.IO.File.ReadAllBytesAsync(packagePath);
 
-            using GrpcChannel channel = CreateGatewayChannel();
-            UpdateService.UpdateServiceClient updateClient = new UpdateService.UpdateServiceClient(channel);
+            await _controlSvc.SendUpdatePackageAsync(gatewayId, fileName, packageData, uuids);
 
-            UpdatePackageRequest request = new UpdatePackageRequest
-            {
-                FileName = fileName,
-                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData)
-            };
-            request.TargetDevices.AddRange(uuids);
-
-            ConsoleSync.WriteLine($"Sending update package '{fileName}' to Gateway for {uuids.Length} device(s)...");
-            await updateClient.SendUpdatePackageAsync(request);
-            ConsoleSync.WriteLine("Update package sent.");
+            ConsoleSync.WriteLine($"Update package '{fileName}' sent to gateway [{gatewayId}] for {uuids.Length} device(s).");
         }
 
+        /// <summary>
+        /// Demonstrates requesting version data from the gateway.
+        /// </summary>
         private async Task MenuRequestVersionData()
         {
-            // Create the gRPC channel
-            using GrpcChannel channel = CreateGatewayChannel();
-            VersionDataService.VersionDataServiceClient versionClient = new VersionDataService.VersionDataServiceClient(channel);
+            ConsoleSync.Write("Enter Gateway ID: ");
+            string gatewayId = (ConsoleSync.ReadLine() ?? "").Trim();
 
-            ConsoleSync.WriteLine("Requesting version data from Gateway...");
-
-            // No fields in VersionDataRequest are needed for an all-devices request
-            VersionDataRequest request = new VersionDataRequest();
-            VersionDataResponse resp = await versionClient.RequestVersionDataAsync(request);
-
-            ConsoleSync.WriteLine($"Result => success={resp.Success}, message={resp.Message}");
-
-            foreach (DeviceVersions devVers in resp.DeviceVersionsList)
-            {
-                ConsoleSync.WriteLine($"\nDevice={devVers.DeviceUuid}");
-
-                if (devVers.Current != null)
-                {
-                    DateTime currentInstalledAt = devVers.Current.InstalledAt.ToDateTime();
-                    ConsoleSync.WriteLine($"  CURRENT => Version={devVers.Current.Version}, InstalledAt={currentInstalledAt}");
-                }
-                else
-                {
-                    ConsoleSync.WriteLine("  CURRENT => (none)");
-                }
-
-                if (devVers.Available.Count > 0)
-                {
-                    ConsoleSync.WriteLine("  AVAILABLE:");
-                    foreach (Gateway.Server.Protos.VersionInfo ver in devVers.Available)
-                    {
-                        DateTime installedAt = ver.InstalledAt.ToDateTime();
-                        ConsoleSync.WriteLine($"    - Version={ver.Version}, InstalledAt={installedAt}");
-                    }
-                }
-                else
-                {
-                    ConsoleSync.WriteLine("  AVAILABLE => (none)");
-                }
-            }
+            await _controlSvc.SendVersionDataRequestAsync(gatewayId);
+            ConsoleSync.WriteLine($"VersionDataRequest sent to gateway [{gatewayId}].");
         }
-
     }
 }

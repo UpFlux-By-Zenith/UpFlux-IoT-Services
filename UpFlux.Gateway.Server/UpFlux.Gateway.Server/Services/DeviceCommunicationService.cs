@@ -8,10 +8,12 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
+using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using UpFlux.Gateway.Server.Models;
+using UpFlux.Gateway.Server.Protos;
 using UpFlux.Gateway.Server.Repositories;
 using FullVersionInfo = UpFlux.Gateway.Server.Models.FullVersionInfo;
 
@@ -34,7 +36,10 @@ namespace UpFlux.Gateway.Server.Services
         private readonly GatewaySettings _settings;
         private readonly DeviceRepository _deviceRepository;
         private readonly AlertingService _alertingService;
-        private readonly CloudCommunicationService _cloudCommunicationService;
+        private readonly IServiceProvider _serviceProvider;
+
+        // Single grpc channel for control messages
+        private ControlChannelWorker _controlChannelWorker;
 
         private TcpListener _listener;
 
@@ -46,14 +51,17 @@ namespace UpFlux.Gateway.Server.Services
             IOptions<GatewaySettings> options,
             DeviceRepository deviceRepository,
             AlertingService alertingService,
-            CloudCommunicationService cloudCommunicationService)
+            IServiceProvider serviceProvider)
         {
             _logger = logger;
             _settings = options.Value;
             _deviceRepository = deviceRepository;
             _alertingService = alertingService;
-            _cloudCommunicationService = cloudCommunicationService;
+            _serviceProvider = serviceProvider;
         }
+
+        private ControlChannelWorker ControlChannelWorker =>
+        _controlChannelWorker ??= _serviceProvider.GetRequiredService<ControlChannelWorker>();
 
         /// <summary>
         /// Starts listening for incoming device connections server.
@@ -248,13 +256,6 @@ namespace UpFlux.Gateway.Server.Services
                         await ForwardMonitoringDataToCloudAsync(device, data).ConfigureAwait(false);
                         await SendMessageAsync(networkStream, "DATA_RECEIVED\n").ConfigureAwait(false);
                     }
-                    else if (message == "READY_FOR_LICENSE")
-                    {
-                        if (!string.IsNullOrWhiteSpace(device.License))
-                            await SendLicenseAsync(device.UUID, device.License, networkStream).ConfigureAwait(false);
-                        else
-                            _logger.LogWarning("No license available to send to device {uuid}.", device.UUID);
-                    }
                     else if (message.StartsWith("NOTIFICATION:"))
                     {
                         string notification = message.Substring("NOTIFICATION:".Length);
@@ -279,15 +280,15 @@ namespace UpFlux.Gateway.Server.Services
         {
             _logger.LogInformation("Received notification from device UUID: {uuid}: {notification}", device.UUID, notification);
 
-            Alert alert = new Alert
+            AlertMessage alert = new AlertMessage
             {
-                Timestamp = DateTimeOffset.UtcNow,
+                Timestamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
                 Level = "Information",
                 Message = notification,
                 Source = $"Device-{device.UUID}"
             };
 
-            await _alertingService.ProcessDeviceLogAsync(alert).ConfigureAwait(false);
+            await ControlChannelWorker.SendAlertAsync(alert).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -309,11 +310,13 @@ namespace UpFlux.Gateway.Server.Services
 
                 _logger.LogInformation("Forwarding monitoring data for device UUID: {uuid} to the cloud.", device.UUID);
 
-                // Forward the monitoring data to the cloud
-                await _cloudCommunicationService.SendAggregatedDataAsync(new List<AggregatedData>
-                {
-                    TransformToAggregatedData(monitoringData)
-                }).ConfigureAwait(false);
+                //Convert to the aggregated data format
+                Protos.AggregatedData aggregatedData = TransformToAggregatedData(monitoringData);
+                MonitoringDataMessage monMsg = new MonitoringDataMessage();
+                monMsg.AggregatedData.Add(aggregatedData);
+
+                // push it up
+                await ControlChannelWorker.SendMonitoringDataAsync(monMsg);
 
                 _logger.LogInformation("Monitoring data for device UUID: {uuid} forwarded to the cloud successfully.", device.UUID);
             }
@@ -332,48 +335,34 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         /// <param name="monitoringData">The monitoring data to transform.</param>
         /// <returns>The transformed AggregatedData object.</returns>
-        private AggregatedData TransformToAggregatedData(MonitoringData monitoringData)
+        private Protos.AggregatedData TransformToAggregatedData(MonitoringData monitoringData)
         {
-            return new AggregatedData
+            return new Protos.AggregatedData
             {
-                UUID = monitoringData.UUID,
-                Timestamp = monitoringData.Metrics.Timestamp,
-                CpuUsage = monitoringData.Metrics.CpuMetrics.CurrentUsage,
-                MemoryUsage = monitoringData.Metrics.MemoryMetrics.UsedMemory /
-                              (double)monitoringData.Metrics.MemoryMetrics.TotalMemory * 100,
-                DiskUsage = monitoringData.Metrics.DiskMetrics.UsedDiskSpace /
-                            (double)monitoringData.Metrics.DiskMetrics.TotalDiskSpace * 100,
-                CpuTemperature = monitoringData.Metrics.CpuTemperatureMetrics.TemperatureCelsius,
-                SystemUptime = monitoringData.Metrics.SystemUptimeMetrics.UptimeSeconds,
-                NetworkUsage = new NetworkUsage
+                Uuid = monitoringData.UUID,
+                Timestamp = Timestamp.FromDateTime(monitoringData.Metrics.Timestamp.ToUniversalTime()),
+                Metrics = new Metrics
                 {
-                    BytesSent = monitoringData.Metrics.NetworkMetrics.TransmittedBytes,
-                    BytesReceived = monitoringData.Metrics.NetworkMetrics.ReceivedBytes
+                    CpuUsage = monitoringData.Metrics.CpuMetrics.CurrentUsage,
+                    MemoryUsage = monitoringData.Metrics.MemoryMetrics.UsedMemory /
+                              (double)monitoringData.Metrics.MemoryMetrics.TotalMemory * 100,
+                    DiskUsage = monitoringData.Metrics.DiskMetrics.UsedDiskSpace /
+                            (double)monitoringData.Metrics.DiskMetrics.TotalDiskSpace * 100,
+                    NetworkUsage = new Protos.NetworkUsage
+                    {
+                        BytesSent = monitoringData.Metrics.NetworkMetrics.TransmittedBytes,
+                        BytesReceived = monitoringData.Metrics.NetworkMetrics.ReceivedBytes
+                    },
+                    CpuTemperature = monitoringData.Metrics.CpuTemperatureMetrics.TemperatureCelsius,
+                    SystemUptime = monitoringData.Metrics.SystemUptimeMetrics.UptimeSeconds
                 },
-                SensorData = new SensorData
+                SensorData = new Protos.SensorData
                 {
                     RedValue = monitoringData.SensorData.RedValue,
                     GreenValue = monitoringData.SensorData.GreenValue,
                     BlueValue = monitoringData.SensorData.BlueValue
                 }
             };
-        }
-
-        /// <summary>
-        /// Sends a license to the device.
-        /// </summary>
-        private async Task SendLicenseAsync(string uuid, string license, NetworkStream networkStream)
-        {
-            try
-            {
-                string licenseMessage = $"LICENSE:{license}\n";
-                await SendMessageAsync(networkStream, licenseMessage).ConfigureAwait(false);
-                _logger.LogInformation("License sent to device UUID: {uuid}", uuid);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send license to device UUID: {uuid}", uuid);
-            }
         }
 
         /// <summary>
@@ -643,7 +632,11 @@ namespace UpFlux.Gateway.Server.Services
             if (device == null)
             {
                 _logger.LogInformation("Device UUID: {uuid} not found. Initiating registration.", uuid);
-                await RegisterDeviceAsync(uuid);
+
+                // send a new license request for registration
+                await ControlChannelWorker.SendLicenseRequestAsync(uuid, isRenewal: false);
+                // no license yet
+                return false;
             }
             else
             {
@@ -662,146 +655,49 @@ namespace UpFlux.Gateway.Server.Services
                     return false;
                 }
 
-                _logger.LogInformation("License for device UUID: {uuid} is expired. Initiating renewal now.", uuid);
-                await RenewLicenseAsync(device);
+                _logger.LogInformation("License for device UUID: {0} is expired. Initiating renewal now.", uuid);
+                // send renewal request
+                await ControlChannelWorker.SendLicenseRequestAsync(uuid, isRenewal: true);
             }
 
-            device = _deviceRepository.GetDeviceByUuid(uuid);
-            return device.LicenseExpiration > DateTime.UtcNow;
+            // we do not have a valid license yet
+            return false;
         }
 
         /// <summary>
-        /// Registers a new device by communicating with the cloud.
+        /// To set the license for a device in the database.
         /// </summary>
-        /// <param name="uuid">The device UUID.</param>
-        /// <returns>A task representing the registration operation.</returns>
-        private async Task RegisterDeviceAsync(string uuid)
+        public Device SetDeviceLicense(string uuid, string license, DateTime expiration)
         {
-            try
-            {
-                Protos.DeviceRegistrationResponse licenseResponse = await _cloudCommunicationService.RegisterDeviceAsync(uuid);
-
-                if (licenseResponse.Approved)
-                {
-                    Device device = new Device
-                    {
-                        UUID = uuid,
-                        License = licenseResponse.License,
-                        LicenseExpiration = licenseResponse.ExpirationDate.ToDateTime()
-                    };
-
-                    _deviceRepository.AddOrUpdateDevice(device);
-
-                    _logger.LogInformation("Device UUID: {uuid} registered successfully.", uuid);
-
-                    // Send license to the device
-                    bool success = await SendLicenseToDeviceAsync(uuid, licenseResponse.License);
-                    if (!success)
-                    {
-                        _logger.LogWarning("Failed to push license to device {uuid}.", uuid);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("Device UUID: {uuid} registration was not approved by the cloud.", uuid);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while registering device UUID: {uuid}", uuid);
-            }
+            Device device = _deviceRepository.GetDeviceByUuid(uuid);
+            if (device == null) return null;
+            device.License = license;
+            device.LicenseExpiration = expiration;
+            device.RegistrationStatus = "Registered";
+            device.NextEarliestRenewalAttempt = DateTime.UtcNow; // reset
+            _deviceRepository.AddOrUpdateDevice(device);
+            return device;
         }
 
         /// <summary>
-        /// Renews the license for an existing device.
+        /// Reschedules the license renewal for a device.
         /// </summary>
-        /// <param name="device">The device whose license needs renewal.</param>
-        /// <returns>A task representing the renewal operation.</returns>
-        private async Task RenewLicenseAsync(Device device)
+        /// <param name="uuid"></param>
+        public void SetLicenseNotApproved(string uuid)
         {
-            try
-            {
-                Protos.LicenseRenewalResponse renewalResponse = await _cloudCommunicationService.RenewLicenseAsync(device.UUID);
-
-                if (renewalResponse.Approved)
-                {
-                    device.License = renewalResponse.License;
-                    device.LicenseExpiration = renewalResponse.ExpirationDate.ToDateTime();
-                    device.RegistrationStatus = "Registered";
-                    // reset the earliest renewal attempt becayse we have a new license
-                    device.NextEarliestRenewalAttempt = DateTime.UtcNow;
-
-                    _deviceRepository.AddOrUpdateDevice(device);
-
-                    _logger.LogInformation("License for device UUID: {uuid} renewed successfully.", device.UUID);
-
-                    // Send updated license to the device
-                    bool success = await SendLicenseToDeviceAsync(device.UUID, renewalResponse.License);
-                    if (!success)
-                    {
-                        _logger.LogWarning("Failed to push renewed license to device {uuid}.", device.UUID);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("License renewal for device UUID: {uuid} was not approved by the cloud.", device.UUID);
-                    // Wait 30 minutes before next attempt
-                    device.NextEarliestRenewalAttempt = DateTime.UtcNow.AddMinutes(30);
-                    _deviceRepository.AddOrUpdateDevice(device);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while renewing license for device UUID: {uuid}", device.UUID);
-                // Also wait 30 minutes before next attempt
-                device.NextEarliestRenewalAttempt = DateTime.UtcNow.AddMinutes(30);
-                _deviceRepository.AddOrUpdateDevice(device);
-            }
-        }
-
-        /// <summary>
-        /// Schedules periodic license checks and renewals.
-        /// </summary>
-        /// <param name="stoppingToken">Token to signal cancellation.</param>
-        /// <returns>A task representing the scheduled operation.</returns>
-        public async Task ScheduleLicenseRenewalsAsync(CancellationToken stoppingToken)
-        {
-            _logger.LogInformation("Starting scheduled license renewals.");
-
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    List<Device> devices = _deviceRepository.GetAllDevices();
-
-                    foreach (Device device in devices)
-                    {
-                        // Check if the license is expiring within the next day
-                        if (device.LicenseExpiration <= DateTime.UtcNow.AddDays(1))
-                        {
-                            _logger.LogInformation("License for device UUID: {uuid} is nearing expiration.", device.UUID);
-                            await RenewLicenseAsync(device);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "An error occurred during scheduled license renewals.");
-                }
-
-                await Task.Delay(TimeSpan.FromMinutes(_settings.LicenseCheckIntervalMinutes), stoppingToken);
-            }
-
-            _logger.LogInformation("Scheduled license renewals are stopping.");
+            Device device = _deviceRepository.GetDeviceByUuid(uuid);
+            if (device == null) return;
+            device.NextEarliestRenewalAttempt = DateTime.UtcNow.AddMinutes(30);
+            _deviceRepository.AddOrUpdateDevice(device);
         }
 
         /// <summary>
         /// Sends a license to a device by connecting as a client.
         /// </summary>
-        public async Task<bool> SendLicenseToDeviceAsync(string uuid, string license)
+        public async Task<bool> SendLicenseToDeviceAsync(string uuid)
         {
             Device device = _deviceRepository.GetDeviceByUuid(uuid);
-            if (device == null)
+            if (device == null || string.IsNullOrWhiteSpace(device.License))
             {
                 _logger.LogWarning("Device with UUID '{uuid}' not found.", uuid);
                 return false;
@@ -815,7 +711,7 @@ namespace UpFlux.Gateway.Server.Services
                 using NetworkStream networkStream = client.GetStream();
 
                 // Directly send the license
-                await SendMessageAsync(networkStream, $"LICENSE:{license}\n").ConfigureAwait(false);
+                await SendMessageAsync(networkStream, $"LICENSE:{device.License}\n").ConfigureAwait(false);
                 _logger.LogInformation("License sent to device UUID: {uuid}", uuid);
                 return true;
 
