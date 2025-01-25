@@ -9,7 +9,16 @@ namespace UpFlux.Cloud.Simulator
     {
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddGrpc();
+            // Add gRPC with large message sizes
+            services.AddGrpc(options =>
+            {
+                // 200 MB limit
+                const int limitBytes = 200 * 1024 * 1024;
+                options.MaxReceiveMessageSize = limitBytes;
+                options.MaxSendMessageSize = limitBytes;
+            });
+
+            services.AddSingleton<ControlChannelService>();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -23,10 +32,7 @@ namespace UpFlux.Cloud.Simulator
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapGrpcService<LicenseServiceMock>();
-                endpoints.MapGrpcService<MonitoringServiceMock>();
-                endpoints.MapGrpcService<AlertServiceMock>();
-                endpoints.MapGrpcService<CloudLogServiceMock>();
+                endpoints.MapGrpcService<ControlChannelService>();
             });
         }
     }

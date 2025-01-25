@@ -38,13 +38,6 @@
   </ItemGroup>
 
 	<ItemGroup>
-		<Protobuf Include="Protos\license.proto" GrpcServices="Client" />
-		<Protobuf Include="Protos\monitoring.proto" GrpcServices="Client" />
-		<Protobuf Include="Protos\update.proto" GrpcServices="Server" />
-		<Protobuf Include="Protos\command.proto" GrpcServices="Server" />
-		<Protobuf Include="Protos\version_data.proto" GrpcServices="Server" />
-		<Protobuf Include="Protos\cloud_logs.proto" GrpcServices="Client" />
-		<Protobuf Include="Protos\log_request.proto" GrpcServices="Server" />
-		<Protobuf Include="Protos\alert.proto" GrpcServices="Client" />
+		<Protobuf Include="Protos\controlchannel.proto" GrpcServices="Client"/>
 	</ItemGroup>
 </Project>

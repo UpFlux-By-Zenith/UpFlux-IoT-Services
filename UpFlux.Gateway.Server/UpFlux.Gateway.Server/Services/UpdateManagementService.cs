@@ -46,7 +46,7 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         /// <param name="updatePackage">The update package to process.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        public async Task HandleUpdatePackageAsync(UpdatePackage updatePackage)
+        public async Task<Dictionary<string, bool>> HandleUpdatePackageAsync(UpdatePackage updatePackage)
         {
             _logger.LogInformation("Processing update package file '{file}' for devices: {devices}",
                            updatePackage.FileName,
@@ -60,11 +60,20 @@ namespace UpFlux.Gateway.Server.Services
                 updatePackage.FilePath = filePath;
 
                 // Distribute the update to devices
-                await DistributeUpdateAsync(updatePackage);
+                Dictionary<string, bool> results = await DistributeUpdateAsync(updatePackage);
+
+                return results;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error while processing update package '{file}'", updatePackage.FileName);
+
+                Dictionary<string, bool> failDict = new Dictionary<string, bool>();
+                foreach (string dev in updatePackage.TargetDevices)
+                {
+                    failDict[dev] = false;
+                }
+                return failDict;
             }
         }
 
@@ -73,23 +82,28 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         /// <param name="updatePackage">The update package to distribute.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        private async Task DistributeUpdateAsync(UpdatePackage updatePackage)
+        private async Task<Dictionary<string, bool>> DistributeUpdateAsync(UpdatePackage updatePackage)
         {
             _logger.LogInformation("Distributing update '{file}' to devices...", updatePackage.FileName);
 
+            // We will store results for each device
+            Dictionary<string, bool> results = new Dictionary<string, bool>();
+
             List<Task> tasks = new List<Task>();
+            object lockObj = new object();
 
             foreach (string deviceUuid in updatePackage.TargetDevices)
             {
                 tasks.Add(Task.Run(async () =>
                 {
+                    bool success = false;
                     try
                     {
                         _logger.LogInformation("Sending update package '{file}' to device {deviceUuid}",
                                        updatePackage.FileName, deviceUuid);
 
                         // Send the update package to the device
-                        bool success = await _deviceCommunicationService.SendUpdatePackageAsync(deviceUuid, updatePackage.FilePath);
+                        success = await _deviceCommunicationService.SendUpdatePackageAsync(deviceUuid, updatePackage.FilePath);
 
                         if (success)
                         {
@@ -107,6 +121,11 @@ namespace UpFlux.Gateway.Server.Services
                         _logger.LogError(ex, "Error sending package '{file}' to device {deviceUuid}.",
                                  updatePackage.FileName, deviceUuid);
                     }
+
+                    lock (lockObj)
+                    {
+                        results[deviceUuid] = success;
+                    }
                 }));
             }
 
@@ -114,6 +133,8 @@ namespace UpFlux.Gateway.Server.Services
             await Task.WhenAll(tasks);
 
             _logger.LogInformation("Distribution of '{file}' completed.", updatePackage.FileName);
+
+            return results;
         }
     }
 }
