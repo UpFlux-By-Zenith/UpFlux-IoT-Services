@@ -1,0 +1,219 @@
+name: UpFlux Gateway Server Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'UpFlux.Gateway.Server/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    # Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Set up .NET
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.x'
+
+    # Install dependencies
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y fakeroot dpkg-dev tar python3-apt
+
+    # Read version from version.txt
+    - name: Read Version from version.txt
+      id: version
+      run: |
+        if [ -f ./UpFlux.Gateway.Server/version.txt ]; then
+          version=$(cat ./UpFlux.Gateway.Server/version.txt)
+        else
+          version="1.0.0"  # Default starting version
+        fi
+        echo "version=$version" >> $GITHUB_ENV
+
+    # Restore dependencies and build the service
+    - name: Restore and Build Service
+      run: dotnet publish ./UpFlux.Gateway.Server/UpFlux.Gateway.Server/UpFlux.Gateway.Server.csproj -r linux-x64 -c Release -o ./publish --self-contained true
+
+    # Create the Debian package directory structure
+    - name: Prepare Debian package structure
+      run: |
+        mkdir -p debian/package/DEBIAN
+        mkdir -p debian/package/opt/upflux-gateway-server
+        mkdir -p debian/package/etc/systemd/system/
+        mkdir -p debian/package/var/log/upflux/
+
+        # Copy the application files
+        cp -r ./publish/* debian/package/opt/upflux-gateway-server/
+
+    # Create systemd service file
+    - name: Create systemd service file
+      run: |
+        cat <<EOF > debian/package/etc/systemd/system/upflux-gateway.service
+        [Unit]
+        Description=UpFlux Gateway Server
+        After=network.target
+
+        [Service]
+        Type=simple
+        ExecStart=/opt/upflux-gateway-server/UpFlux.Gateway.Server
+        WorkingDirectory=/opt/upflux-gateway-server
+        StandardOutput=append:/var/log/upflux/upflux-gateway-server.log
+        StandardError=append:/var/log/upflux/upflux-gateway-server-error.log
+        Restart=always
+        User=root
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+
+    # Create the DEBIAN control file
+    - name: Create Debian control file
+      run: |
+        cat <<EOF > debian/package/DEBIAN/control
+        Package: upflux-gateway-server
+        Version: ${{ env.version }}
+        Section: base
+        Priority: optional
+        Architecture: amd64
+        Essential: no
+        Maintainer: Patrick Orjieh <orjiehpatrick@gmail.com>
+        Description: UpFlux Gateway Server
+        EOF
+
+    # Create the postinst script
+    - name: Create postinst script
+      run: |
+        cat <<EOF > debian/package/DEBIAN/postinst
+        #!/bin/bash
+        set -e
+
+        # Set permissions on the executable
+        chmod +x /opt/upflux-gateway-server/UpFlux.Gateway.Server
+
+        # Create the log directory if it doesn't exist
+        mkdir -p /var/log/upflux/
+        chmod 755 /var/log/upflux/
+
+        # Reload systemd daemon
+        systemctl daemon-reload
+
+        # Restart the service on upgrade or start it on new installation
+        if [ "\$1" = "configure" ] && [ -n "\$2" ]; then
+          # Upgrading
+          systemctl restart upflux-gateway.service
+        else
+          # New installation
+          systemctl enable upflux-gateway.service
+          systemctl start upflux-gateway.service
+        fi
+
+        exit 0
+        EOF
+        chmod 755 debian/package/DEBIAN/postinst
+
+    # Create the prerm script
+    - name: Create prerm script
+      run: |
+        cat <<EOF > debian/package/DEBIAN/prerm
+        #!/bin/bash
+        set -e
+
+        # Stop and disable the service
+        systemctl stop upflux-gateway.service || true
+        systemctl disable upflux-gateway.service || true
+
+        exit 0
+        EOF
+        chmod 755 debian/package/DEBIAN/prerm
+
+    # Create the postrm script
+    - name: Create postrm script
+      run: |
+        cat <<EOF > debian/package/DEBIAN/postrm
+        #!/bin/bash
+        set -e
+
+        if [ "\$1" = "purge" ]; then
+          # Remove the service file
+          rm -f /etc/systemd/system/upflux-gateway.service
+
+          # Remove application files
+          rm -rf /opt/upflux-gateway-server
+
+          # Remove log directory
+          # Uncomment the next line if you want to remove logs on purge
+          # rm -rf /var/log/upflux/
+
+          systemctl daemon-reload
+        fi
+
+        exit 0
+        EOF
+        chmod 755 debian/package/DEBIAN/postrm
+
+    # Build the Debian package with gzip compression
+    - name: Build Debian package with gzip compression
+      run: |
+        cd debian/package
+        # Create control.tar.gz
+        tar --create --gzip --file control.tar.gz --directory DEBIAN .
+        # Create data.tar.gz
+        tar --create --gzip --file data.tar.gz --directory . opt etc var
+        # Create debian-binary
+        echo "2.0" > debian-binary
+        # Combine into a .deb package
+        ar rcs upflux-gateway-server_${{ env.version }}_amd64.deb debian-binary control.tar.gz data.tar.gz
+        # Move the .deb package to the root directory
+        mv upflux-gateway-server_${{ env.version }}_amd64.deb ../../upflux-gateway-server_${{ env.version }}_amd64.deb
+
+    # Create .nuspec file
+    - name: Create .nuspec file
+      run: |
+        cat <<EOF > UpFlux.Gateway.Server.nuspec
+        <?xml version="1.0"?>
+        <package>
+          <metadata>
+            <id>UpFlux.Gateway.Server</id>
+            <version>${{ env.version }}</version>
+            <authors>Patrick Orjieh</authors>
+            <owners>Patrick Orjieh</owners>
+            <requireLicenseAcceptance>false</requireLicenseAcceptance>
+            <description>UpFlux Gateway Server Debian Package</description>
+            <tags>UpFlux Gateway Server Debian Package</tags>
+          </metadata>
+          <files>
+            <file src="upflux-gateway-server_${{ env.version }}_amd64.deb" target="content" />
+          </files>
+        </package>
+        EOF
+
+    # Package the .deb into a NuGet package
+    - name: Create NuGet package
+      run: nuget pack UpFlux.Gateway.Server.nuspec
+      
+    # Conditionally publish based on whether it's an automatic trigger or manual
+    - name: Publish NuGet Package to GitHub Packages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        echo "Publishing NuGet package to GitHub Packages..."
+        dotnet nuget push UpFlux.Gateway.Server.${{ env.version }}.nupkg --api-key ${{ secrets.MY_GITHUB_PAT }} --source "https://nuget.pkg.github.com/UpFlux-By-Zenith/index.json"
+
+    - name: Upload NuGet Package Artifact
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v3
+      with:
+        name: upflux-gateway-server-nuget-package
+        path: UpFlux.Gateway.Server.${{ env.version }}.nupkg
