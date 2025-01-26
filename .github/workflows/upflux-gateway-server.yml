@@ -45,7 +45,7 @@ jobs:
 
     # Restore dependencies and build the service
     - name: Restore and Build Service
-      run: dotnet publish ./UpFlux.Gateway.Server/UpFlux.Gateway.Server.csproj -r linux-x64 -c Release -o ./publish --self-contained true
+      run: dotnet publish ./UpFlux.Gateway.Server/UpFlux.Gateway.Server/UpFlux.Gateway.Server.csproj -r linux-x64 -c Release -o ./publish --self-contained true
 
     # Create the Debian package directory structure
     - name: Prepare Debian package structure
