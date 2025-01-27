@@ -125,7 +125,8 @@ jobs:
           CLOUD_SERVER_ADDRESS=\$(cat "\$CLOUD_CONF")
           if [ -n "\$CLOUD_SERVER_ADDRESS" ]; then
             echo "Setting CloudServerAddress to \$CLOUD_SERVER_ADDRESS in appsettings.json"
-            sed -i "s|CLOUD_SERVER_ADDRESS|\$CLOUD_SERVER_ADDRESS|g" "\$APPSETTINGS"
+            # Replace only the value of "CloudServerAddress"
+            sed -i "s|\"CloudServerAddress\": \".*\"|\"CloudServerAddress\": \"\$CLOUD_SERVER_ADDRESS\"|g" "\$APPSETTINGS"
           else
             echo "Warning: Cloud server address is empty in \$CLOUD_CONF"
           fi
