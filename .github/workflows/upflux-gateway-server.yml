@@ -99,6 +99,40 @@ jobs:
         cat <<EOF > debian/package/DEBIAN/postinst
         #!/bin/bash
         set -e
+        
+        # Variables
+        DB_DIR="/var/lib/upflux"
+        DB_FILE="\$DB_DIR/upflux_gateway.db"
+        CLOUD_CONF="/etc/upflux/cloud_address.conf"
+        APPSETTINGS="/opt/upflux-gateway-server/appsettings.json"
+
+        # Ensure the database directory exists
+        if [ ! -d "\$DB_DIR" ]; then
+          echo "Creating database directory: \$DB_DIR"
+          mkdir -p "\$DB_DIR"
+          chmod 755 "\$DB_DIR"
+        fi
+
+        # Create an empty database file if it doesn't exist
+        if [ ! -f "\$DB_FILE" ]; then
+          echo "Creating empty database file: \$DB_FILE"
+          touch "\$DB_FILE"
+          chmod 644 "\$DB_FILE"
+        fi
+
+        # Update appsettings.json with the real CloudServerAddress
+        if [ -f "\$CLOUD_CONF" ]; then
+          CLOUD_SERVER_ADDRESS=\$(cat "\$CLOUD_CONF")
+          if [ -n "\$CLOUD_SERVER_ADDRESS" ]; then
+            echo "Setting CloudServerAddress to \$CLOUD_SERVER_ADDRESS in appsettings.json"
+            # Replace only the value of "CloudServerAddress"
+            sed -i "s|\"CloudServerAddress\": \".*\"|\"CloudServerAddress\": \"\$CLOUD_SERVER_ADDRESS\"|g" "\$APPSETTINGS"
+          else
+            echo "Warning: Cloud server address is empty in \$CLOUD_CONF"
+          fi
+        else
+          echo "Warning: Cloud configuration file \$CLOUD_CONF not found. Using default placeholder."
+        fi
 
         # Set permissions on the executable
         chmod +x /opt/upflux-gateway-server/UpFlux.Gateway.Server

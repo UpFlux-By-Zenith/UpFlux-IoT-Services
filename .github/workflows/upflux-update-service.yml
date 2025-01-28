@@ -100,12 +100,34 @@ jobs:
         #!/bin/bash
         set -e
 
-        # Set permissions on the executable
-        chmod +x /opt/upflux-update-service/UpFlux.Update.Service
+        # Variables
+        LOG_DIR="/var/log/upflux"
+        DEVICE_UUID_CONF="/etc/upflux/device_uuid.conf"
+        APPSETTINGS="/opt/upflux-update-service/appsettings.json"
 
         # Create the log directory if it doesn't exist
-        mkdir -p /var/log/upflux/
-        chmod 755 /var/log/upflux/
+        if [ ! -d "\$LOG_DIR" ]; then
+          echo "Creating log directory: \$LOG_DIR"
+          mkdir -p "\$LOG_DIR"
+          chmod 755 "\$LOG_DIR"
+        fi
+
+        # Read device UUID from configuration file and update appsettings.json
+        if [ -f "\$DEVICE_UUID_CONF" ]; then
+          DEVICE_UUID=\$(cat "\$DEVICE_UUID_CONF")
+          if [ -n "\$DEVICE_UUID" ]; then
+            echo "Setting DeviceUuid to \$DEVICE_UUID in appsettings.json"
+            # Replace only the value of "DeviceUuid" in appsettings.json
+            sed -i "s|\"DeviceUuid\": \".*\"|\"DeviceUuid\": \"\$DEVICE_UUID\"|g" "\$APPSETTINGS"
+          else
+            echo "Warning: Device UUID is empty in \$DEVICE_UUID_CONF"
+          fi
+        else
+          echo "Warning: Device UUID configuration file \$DEVICE_UUID_CONF not found. Using default placeholder."
+        fi
+
+        # Set permissions on the executable
+        chmod +x /opt/upflux-update-service/UpFlux.Update.Service
 
         # Reload systemd daemon
         systemctl daemon-reload

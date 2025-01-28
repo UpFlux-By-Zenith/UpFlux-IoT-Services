@@ -115,11 +115,11 @@ namespace UpFlux.Cloud.Simulator
             DateTime expiration = DateTime.UtcNow.AddMonths(req.IsRenewal ? 2 : 1);
             string signature = req.IsRenewal ? "TestBase64SignatureIfAny" : "TestBase64Signature";
             string xmlLicense = $@"
-                <License>
+                <Licence>
                   <ExpirationDate>{expiration:o}</ExpirationDate>
-                  <MachineId>{req.DeviceUuid}</MachineId>
+                  <MachineID>{req.DeviceUuid}</MachineID>
                   <Signature>{signature}</Signature>
-                </License>";
+                </Licence>";
 
             LicenseResponse licenseResp = new LicenseResponse
             {

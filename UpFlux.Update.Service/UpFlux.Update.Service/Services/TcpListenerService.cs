@@ -432,9 +432,17 @@ namespace UpFlux.Update.Service.Services
 
                 _logger.LogInformation("Version information sent to Gateway Server.");
             }
+            catch (IOException ex)
+            {
+                _logger.LogError(ex, "Network error while handling GET_VERSIONS command.");
+            }
+            catch (JsonSerializationException ex)
+            {
+                _logger.LogError(ex, "Error serializing version information to JSON.");
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error handling GET_VERSIONS command.");
+                _logger.LogError(ex, "Unexpected error while handling GET_VERSIONS command.");
             }
         }
 
