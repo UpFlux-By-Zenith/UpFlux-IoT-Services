@@ -139,7 +139,7 @@ namespace UpFlux.Monitoring.Service
                 xmlDoc.LoadXml(licenseContent);
 
                 // Get the <ExpirationDate> node
-                System.Xml.XmlNode? expirationNode = xmlDoc.SelectSingleNode("//License/ExpirationDate");
+                System.Xml.XmlNode? expirationNode = xmlDoc.SelectSingleNode("//Licence/ExpirationDate");
                 if (expirationNode == null)
                 {
                     _logger.LogWarning("Invalid license file: missing <ExpirationDate> node.");
