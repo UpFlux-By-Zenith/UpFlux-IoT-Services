@@ -1,5 +1,5 @@
 """
-module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values.
+module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECTS WHITE
 """
 import RPi.GPIO as GPIO
 import time
@@ -16,12 +16,14 @@ OE_PIN = 14
 OUT_PIN = 22
 S2_PIN = 17
 S3_PIN = 27
-BUZZER_PIN = 7
+BUZZER_PIN = 25
+LED_PIN = 24 
+
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
-GREEN_THRESHOLD = 100
-BLUE_THRESHOLD = 100
+GREEN_THRESHOLD = 200
+BLUE_THRESHOLD = 200
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
 FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
@@ -39,17 +41,19 @@ class ColorSensor:
         GPIO.setup(S2_PIN, GPIO.OUT)
         GPIO.setup(S3_PIN, GPIO.OUT)
         GPIO.setup(OE_PIN, GPIO.OUT)
+        GPIO.setup(LED_PIN, GPIO.OUT)
         
         GPIO.output(OE_PIN, GPIO.LOW)
         GPIO.output(S0_PIN, GPIO.HIGH)
         GPIO.output(S1_PIN, GPIO.LOW)
+        GPIO.output(LED_PIN, GPIO.HIGH)  
         GPIO.setup(BUZZER_PIN, GPIO.OUT)
 
         global pwm
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return not red_value > RED_THRESHOLD and green_value < GREEN_THRESHOLD and blue_value < BLUE_THRESHOLD
+        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
 
     def activate_buzzer(self):
         pwm.start(50)  
@@ -106,15 +110,15 @@ class ColorSensor:
                 #print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
 
                 #print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
-                
-                # Create a dictionary with the RGB values
+				
+				# Create a dictionary with the RGB values
                 sensor_data = {
                     "red_value": red_value,
                     "green_value": green_value,
                     "blue_value": blue_value
                 }
-
-                # Output the JSON-formatted sensor data
+				
+				# Output the JSON-formatted sensor data
                 print(json.dumps(sensor_data), flush=True)
 
                 # Log the sensor data if needed
@@ -137,6 +141,7 @@ class ColorSensor:
                 time.sleep(1)
 
     def cleanup(self):
+        GPIO.output(LED_PIN, GPIO.LOW) 
         GPIO.cleanup()
         logging.info("RGB sensor shutdown")
 
