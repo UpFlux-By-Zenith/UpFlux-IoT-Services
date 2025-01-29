@@ -22,8 +22,8 @@ LED_PIN = 24
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
-GREEN_THRESHOLD = 200
-BLUE_THRESHOLD = 200
+GREEN_THRESHOLD = 60
+BLUE_THRESHOLD = 80
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
 FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
@@ -53,7 +53,9 @@ class ColorSensor:
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
+        if not ( green_value <= GREEN_THRESHOLD and blue_value <= BLUE_THRESHOLD and red_value > 200):
+           return True  
+        return False 
 
     def activate_buzzer(self):
         pwm.start(50)  
