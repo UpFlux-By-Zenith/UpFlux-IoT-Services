@@ -31,58 +31,24 @@ namespace UpFlux.Gateway.Server
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
 
-            // Configure Serilog
-            Log.Logger = new LoggerConfiguration()
-                .ReadFrom.Configuration(configuration)
-                .CreateLogger();
+            // Build the host to access DI services
+            IHost host = CreateHostBuilder(args, configuration).Build();
+
+            // Access AlertingService from the DI container
+            using (IServiceScope scope = host.Services.CreateScope())
+            {
+                AlertingService alertingService = scope.ServiceProvider.GetRequiredService<AlertingService>();
+
+                // Configure Serilog
+                Log.Logger = new LoggerConfiguration()
+                    .ReadFrom.Configuration(configuration)
+                    .WriteTo.Sink(new SerilogAlertingSink(null, alertingService))
+                    .CreateLogger();
+            }
 
             try
             {
                 Log.Information("Starting UpFlux Gateway Server...");
-
-                // Retrieve GatewayGrpcPort from configuration
-                var gatewayGrpcPort = configuration.GetSection("GatewaySettings").GetValue<int>("GatewayGrpcPort");
-
-                // 3. Create and configure the Host
-                IHost host = Host.CreateDefaultBuilder(args)
-                    .UseSystemd()
-                    .UseSerilog()
-
-                    .ConfigureServices((hostContext, services) =>
-                    {
-                        // Bind "GatewaySettings" section from appsettings
-                        services.Configure<GatewaySettings>(configuration.GetSection("GatewaySettings"));
-
-                        services.AddSingleton<DeviceRepository>();
-
-                        services.AddSingleton<CloudCommunicationService>();
-                        services.AddSingleton<AlertingService>();
-                        services.AddSingleton<DeviceCommunicationService>();
-                        services.AddSingleton<UpdateManagementService>();
-                        services.AddSingleton<LogCollectionService>();
-                        services.AddSingleton<CommandExecutionService>();
-
-                        services.AddHostedService<Worker>();
-                        services.AddHostedService<DeviceDiscoveryService>();
-                    })
-
-                    // Configure the Kestrel-based gRPC server
-                    .ConfigureWebHostDefaults(webBuilder =>
-                    {
-                        // Kestrel server on port 5001 with TLS
-                        webBuilder.ConfigureKestrel(serverOptions =>
-                        {
-                            // explicitly telling kestrel to allow 200 MB for the package size
-                            serverOptions.Limits.MaxRequestBodySize = 200 * 1024 * 1024;
-
-                            serverOptions.ListenAnyIP(gatewayGrpcPort, listenOptions =>
-                            {
-                                listenOptions.Protocols = HttpProtocols.Http2;
-                            });
-                        });
-                        webBuilder.UseStartup<Startup>();
-                    })
-                    .Build();
 
                 host.Run();
             }
@@ -97,5 +63,13 @@ namespace UpFlux.Gateway.Server
                 Log.CloseAndFlush();
             }
         }
+
+        public static IHostBuilder CreateHostBuilder(string[] args, IConfiguration configuration) =>
+            Host.CreateDefaultBuilder(args)
+                .UseSerilog()
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.UseStartup<Startup>();
+                });
     }
 }

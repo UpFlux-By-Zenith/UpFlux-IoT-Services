@@ -1,5 +1,5 @@
 """
-module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECT RED
+module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECTS WHITE
 """
 import RPi.GPIO as GPIO
 import time
@@ -21,8 +21,8 @@ LED_PIN = 24
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
-GREEN_THRESHOLD = 60
-BLUE_THRESHOLD = 80
+GREEN_THRESHOLD = 200
+BLUE_THRESHOLD = 200
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
 FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
@@ -52,9 +52,7 @@ class ColorSensor:
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        if not ( green_value <= GREEN_THRESHOLD and blue_value <= BLUE_THRESHOLD and red_value > 200):
-           return True  
-        return False 
+        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
 
     def activate_buzzer(self):
         pwm.start(50)  
@@ -108,7 +106,19 @@ class ColorSensor:
 
                 green_freq = self.measure_color_frequency('green')
                 green_value = self.map_frequency_to_rgb(green_freq, 'green')
-                print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
+                #print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
+
+                #print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
+				
+				# Create a dictionary with the RGB values
+                sensor_data = {
+                    "red_value": red_value,
+                    "green_value": green_value,
+                    "blue_value": blue_value
+                }
+				
+				# Output the JSON-formatted sensor data
+                print(json.dumps(sensor_data), flush=True)
 
                 print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
 

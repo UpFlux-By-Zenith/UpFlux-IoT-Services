@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using UpFlux.Gateway.Server.Enums;
 using UpFlux.Gateway.Server.Models;
 using UpFlux.Gateway.Server.Services;
@@ -17,8 +18,9 @@ namespace UpFlux.Gateway.Server.Services
     {
         private readonly ILogger<CommandExecutionService> _logger;
         private readonly DeviceCommunicationService _deviceCommunicationService;
-        private readonly CloudCommunicationService _cloudCommunicationService;
+        private readonly AlertingService _alertingService;
         private readonly ConcurrentDictionary<string, CommandStatus> _commandStatuses;
+        private readonly GatewaySettings _gatewaySettings;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CommandExecutionService"/> class.
@@ -28,12 +30,14 @@ namespace UpFlux.Gateway.Server.Services
         public CommandExecutionService(
             ILogger<CommandExecutionService> logger,
             DeviceCommunicationService deviceCommunicationService,
-            CloudCommunicationService cloudCommunicationService)
+            AlertingService alertingService,
+            IOptions<GatewaySettings> gatewaySettings)
         {
             _logger = logger;
             _deviceCommunicationService = deviceCommunicationService;
-            _cloudCommunicationService = cloudCommunicationService;
             _commandStatuses = new ConcurrentDictionary<string, CommandStatus>();
+            _alertingService = alertingService;
+            _gatewaySettings = gatewaySettings.Value;
         }
 
         /// <summary>
@@ -41,9 +45,11 @@ namespace UpFlux.Gateway.Server.Services
         /// </summary>
         /// <param name="command">The command to process.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        public async Task HandleCommandAsync(Command command)
+        public async Task<CommandStatus> HandleCommandAsync(Command command)
         {
             _logger.LogInformation("Processing command {commandId} of type {commandType}", command.CommandId, command.CommandType);
+
+            CommandStatus commandStatus = null;
 
             try
             {
@@ -51,11 +57,10 @@ namespace UpFlux.Gateway.Server.Services
                 if (!ValidateCommand(command))
                 {
                     _logger.LogWarning("Command {commandId} failed validation.", command.CommandId);
-                    return;
+                    return null;
                 }
 
-                // Initialize command status
-                CommandStatus commandStatus = new CommandStatus
+                commandStatus = new CommandStatus
                 {
                     CommandId = command.CommandId,
                     CommandType = command.CommandType,
@@ -77,6 +82,8 @@ namespace UpFlux.Gateway.Server.Services
             {
                 _logger.LogError(ex, "An error occurred while processing command {commandId}", command.CommandId);
             }
+
+            return commandStatus;
         }
 
         /// <summary>
@@ -169,11 +176,11 @@ namespace UpFlux.Gateway.Server.Services
                 Message = $"Command {commandStatus.CommandId} of type {commandStatus.CommandType} executed. " +
                           $"Succeeded on devices: {string.Join(", ", commandStatus.DevicesSucceeded)}. " +
                           $"Failed on devices: {string.Join(", ", commandStatus.DevicesFailed)}.",
-                Source = "GatewayServer"
+                Source = _gatewaySettings.GatewayId
             };
 
             // Send alert to the cloud
-            await _cloudCommunicationService.SendAlertAsync(alert);
+            await _alertingService.ProcessDeviceLogAsync(alert);
         }
 
         /// <summary>

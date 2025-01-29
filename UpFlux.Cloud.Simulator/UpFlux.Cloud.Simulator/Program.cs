@@ -35,12 +35,17 @@ namespace UpFlux.Cloud.Simulator
                 IHost host = CreateHostBuilder(args, configuration).Build();
 
                 // Start the host in background
-                host.Start();
+                await host.StartAsync();
 
                 Log.Information("Cloud Simulator started. Press CTRL+C or use menu to exit.");
 
-                // Show a console menu that calls the Gateway
-                await new ConsoleMenu(configuration).RunMenuLoop();
+                // Now retrieve the necessary services from DI (pure DI approach)
+                ControlChannelService controlChannelService = host.Services.GetRequiredService<ControlChannelService>();
+                CloudSettings? cloudSettings = configuration.GetSection("CloudSettings").Get<CloudSettings>();
+
+                // Create the console menu
+                ConsoleMenu menu = new ConsoleMenu(configuration, cloudSettings, controlChannelService);
+                await menu.RunMenuLoop();
 
                 // After menu ends, stop the host
                 await host.StopAsync();

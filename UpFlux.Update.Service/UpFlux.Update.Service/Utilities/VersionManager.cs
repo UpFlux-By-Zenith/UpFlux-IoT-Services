@@ -135,42 +135,82 @@ namespace UpFlux.Update.Service.Utilities
 
         public FullVersionInfo GetFullVersionInfo()
         {
-            // Get the current installed version
-            string currentVersion = GetCurrentInstalledVersion();
-
-            // Get the installation date of the current version from the package file using the GetPackageByVersion method
-            UpdatePackage currentPackage = GetPackageByVersion(currentVersion);
-            DateTime currentVersionInstalledAt = File.GetCreationTimeUtc(currentPackage.FilePath);
-
-            VersionRecord currentRecord = new VersionRecord
+            try
             {
-                Version = currentVersion,
-                InstalledAt = currentVersionInstalledAt
-            };
+                // Get the current installed version
+                string currentVersion = GetCurrentInstalledVersion();
 
-            // Gather other packages in /opt/upflux-update-service/packages
-            List<VersionRecord> availableList = new List<VersionRecord>();
-            string[] debFiles = Directory.GetFiles(_config.PackageDirectory, _config.PackageNamePattern);
-            foreach (string debPath in debFiles)
-            {
-                string version = GetVersionFromFileName(debPath);
-                DateTime fileTime = File.GetCreationTimeUtc(debPath);
-
-                availableList.Add(new VersionRecord
+                VersionRecord currentRecord = null;
+                if (!string.IsNullOrEmpty(currentVersion) && currentVersion != "Unknown")
                 {
-                    Version = version,
-                    InstalledAt = fileTime
-                });
+                    // Attempt to get the current package details
+                    UpdatePackage currentPackage = GetPackageByVersion(currentVersion);
+                    if (currentPackage != null && File.Exists(currentPackage.FilePath))
+                    {
+                        DateTime currentVersionInstalledAt = File.GetCreationTimeUtc(currentPackage.FilePath);
+                        currentRecord = new VersionRecord
+                        {
+                            Version = currentVersion,
+                            InstalledAt = currentVersionInstalledAt
+                        };
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Current package details could not be found for version: {CurrentVersion}", currentVersion);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Current installed version is unknown or could not be retrieved.");
+                }
+
+                // Gather other packages in the package directory
+                List<VersionRecord> availableList = new List<VersionRecord>();
+                try
+                {
+                    string[] debFiles = Directory.GetFiles(_config.PackageDirectory, _config.PackageNamePattern);
+                    foreach (string debPath in debFiles)
+                    {
+                        string version = GetVersionFromFileName(debPath);
+                        DateTime fileTime = File.GetCreationTimeUtc(debPath);
+
+                        availableList.Add(new VersionRecord
+                        {
+                            Version = version,
+                            InstalledAt = fileTime
+                        });
+                    }
+                }
+                catch (DirectoryNotFoundException ex)
+                {
+                    _logger.LogError(ex, "Package directory not found: {PackageDirectory}", _config.PackageDirectory);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error gathering available packages.");
+                }
+
+                // Remove the "Current" version from the "Available" list if it exists
+                if (currentRecord != null)
+                {
+                    availableList.RemoveAll(r => r.Version == currentRecord.Version);
+                }
+
+                return new FullVersionInfo
+                {
+                    Current = currentRecord,
+                    Available = availableList
+                };
             }
-
-            // remove the "Current" from the "Available" if it's in that folder
-            availableList.RemoveAll(r => r.Version == currentVersion);
-
-            return new FullVersionInfo
+            catch (Exception ex)
             {
-                Current = currentRecord,
-                Available = availableList
-            };
+                _logger.LogError(ex, "Error retrieving full version information.");
+                return new FullVersionInfo
+                {
+                    Current = null,
+                    Available = new List<VersionRecord>()
+                };
+            }
         }
     }
 }
