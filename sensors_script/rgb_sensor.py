@@ -53,7 +53,27 @@ class ColorSensor:
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
+    	total = red_value + green_value + blue_value
+    	if total == 0:
+        	return False  
+
+    	red_ratio = red_value / total
+    	green_ratio = green_value / total
+    	blue_ratio = blue_value / total
+
+    	RED_RATIO_THRESHOLD = 0.5  
+    	GREEN_TOLERANCE = 0.35  
+    	BLUE_TOLERANCE = 0.35 
+    	MIN_BRIGHTNESS = 40 
+
+    	if total < MIN_BRIGHTNESS:
+        	if red_ratio > 0.45 and green_ratio < 0.4 and blue_ratio < 0.4:
+            		return False 
+
+    	if red_ratio > RED_RATIO_THRESHOLD and green_ratio < GREEN_TOLERANCE and blue_ratio < BLUE_TOLERANCE:
+        	return False  
+
+    	return True 
 
     def activate_buzzer(self):
         pwm.start(50)  
