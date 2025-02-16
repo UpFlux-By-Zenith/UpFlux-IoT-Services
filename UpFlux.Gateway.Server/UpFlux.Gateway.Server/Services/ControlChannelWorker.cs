@@ -488,6 +488,62 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
+        /// To send AI recommendations to the Cloud.
+        /// </summary>
+        public async Task SendAiRecommendationsAsync(AiClusteringResult clusters, AiSchedulingResult schedule)
+        {
+            if (_requestStream == null)
+            {
+                _logger.LogWarning("No active Cloud connection, cannot send AI recommendations");
+                return;
+            }
+
+            AIRecommendations recs = new AIRecommendations();
+
+            // fill scheduling clusters
+            if (schedule != null && schedule.Clusters != null)
+            {
+                foreach (AiScheduledCluster sc in schedule.Clusters)
+                {
+                    AIScheduledCluster asc = new AIScheduledCluster
+                    {
+                        ClusterId = sc.ClusterId,
+                        UpdateTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(sc.UpdateTimeUtc.ToUniversalTime())
+                    };
+                    asc.DeviceUuids.AddRange(sc.DeviceUuids);
+                    recs.Clusters.Add(asc);
+                }
+            }
+
+            //  fill plot data
+            if (clusters != null && clusters.PlotData != null)
+            {
+                foreach (AiPlotPoint p in clusters.PlotData)
+                {
+                    AIPlotPoint pp = new AIPlotPoint
+                    {
+                        DeviceUuid = p.DeviceUuid,
+                        X = p.X,
+                        Y = p.Y,
+                        ClusterId = p.ClusterId
+                    };
+                    recs.PlotData.Add(pp);
+                }
+            }
+
+            ControlMessage ctrlMsg = new ControlMessage
+            {
+                SenderId = _gatewaySettings.GatewayId,
+                AiRecommendations = recs
+            };
+
+            await _requestStream.WriteAsync(ctrlMsg);
+            _logger.LogInformation("Sent AIRecommendations to Cloud: {0} clusters, {1} plot points.",
+                recs.Clusters.Count, recs.PlotData.Count);
+        }
+
+
+        /// <summary>
         /// Maps the Protobuf CommandType to the C# CommandType enum.
         /// </summary>
         /// <param name="commandType">The Protobuf CommandType.</param>

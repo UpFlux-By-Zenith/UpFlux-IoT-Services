@@ -194,7 +194,7 @@ message AIRecommendations {
 message AIScheduledCluster {
   string clusterId = 1;
   repeated string deviceUuids = 2;
-  google.protobuf.Timestamp startTime = 3;
+  google.protobuf.Timestamp updateTime = 3;
 }
 
 message AIPlotPoint {
