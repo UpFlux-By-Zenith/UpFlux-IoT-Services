@@ -42,6 +42,8 @@ namespace UpFlux.Gateway.Server
             services.AddSingleton<UpdateManagementService>();
             services.AddSingleton<CommandExecutionService>();
             services.AddSingleton<AlertingService>();
+            services.AddSingleton<DeviceUsageAggregator>();
+            services.AddSingleton<AiCommunicationService>();
 
             // The single control channel worker that dials the Cloud
             // 1) Explicitly register ControlChannelWorker as a singleton
@@ -52,6 +54,7 @@ namespace UpFlux.Gateway.Server
 
             services.AddHostedService<Worker>();
             services.AddHostedService<DeviceDiscoveryService>();
+            services.AddHostedService<AiIntegrationWorker>();
         }
 
         /// <summary>
