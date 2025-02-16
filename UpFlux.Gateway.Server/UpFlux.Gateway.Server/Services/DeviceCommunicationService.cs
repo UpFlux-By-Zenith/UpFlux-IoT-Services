@@ -37,6 +37,7 @@ namespace UpFlux.Gateway.Server.Services
         private readonly DeviceRepository _deviceRepository;
         private readonly AlertingService _alertingService;
         private readonly IServiceProvider _serviceProvider;
+        private readonly DeviceUsageAggregator _deviceUsageAggregator;
 
         // Single grpc channel for control messages
         private ControlChannelWorker _controlChannelWorker;
@@ -51,13 +52,15 @@ namespace UpFlux.Gateway.Server.Services
             IOptions<GatewaySettings> options,
             DeviceRepository deviceRepository,
             AlertingService alertingService,
-            IServiceProvider serviceProvider)
+            IServiceProvider serviceProvider,
+            DeviceUsageAggregator deviceUsageAggregator)
         {
             _logger = logger;
             _settings = options.Value;
             _deviceRepository = deviceRepository;
             _alertingService = alertingService;
             _serviceProvider = serviceProvider;
+            _deviceUsageAggregator = deviceUsageAggregator;
         }
 
         private ControlChannelWorker ControlChannelWorker =>
@@ -307,6 +310,19 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogWarning("Invalid monitoring data received from device UUID: {uuid}", device.UUID);
                     return;
                 }
+
+                // ----------- Record usage for aggregator -----------
+                double cpuPercent = monitoringData.Metrics.CpuMetrics.CurrentUsage;
+                double memPercent = 0;
+                if (monitoringData.Metrics.MemoryMetrics.TotalMemory > 0)
+                {
+                    memPercent = (monitoringData.Metrics.MemoryMetrics.UsedMemory /
+                                  (double)monitoringData.Metrics.MemoryMetrics.TotalMemory) * 100.0;
+                }
+                double netSent = monitoringData.Metrics.NetworkMetrics.TransmittedBytes;
+                double netRecv = monitoringData.Metrics.NetworkMetrics.ReceivedBytes;
+
+                _deviceUsageAggregator.RecordUsage(device.UUID, cpuPercent, memPercent, netSent, netRecv);
 
                 _logger.LogInformation("Forwarding monitoring data for device UUID: {uuid} to the cloud.", device.UUID);
 
