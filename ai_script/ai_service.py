@@ -11,11 +11,11 @@ from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
 import numpy as np
 import datetime
+import random
 
 app = Flask(__name__)
 
-# For demonstration, we store DBSCAN EPS + MIN_SAMPLES
-EPS = 0.4
+EPS = 0.35
 MIN_SAMPLES = 2
 
 @app.route("/ai/clustering", methods=["POST"])
@@ -44,7 +44,6 @@ def clustering():
 
     arr = np.array(vectors)
     if arr.shape[0] < 2:
-        # trivial, can't cluster
         clusters_obj = [{"clusterId":"0", "deviceUuids":deviceUuids}]
         return jsonify({
             "clusters": clusters_obj,
@@ -90,128 +89,120 @@ def clustering():
 
 @app.route("/ai/scheduling", methods=["POST"])
 def scheduling():
-    """
-    Input: AiClusteringResult:
-      {
-        "clusters": [
-          { "clusterId":"0", "deviceUuids":["ABC","DEF"] },
-          { "clusterId":"1", "deviceUuids":["XYZ"] }
-        ],
-        "plotData": [...]
-      }
-      
-      1) Heuristic: For each cluster, pick a base UpdateTime that tries to avoid known busy fractions.
-      2) LNS: randomly shift half the clusters' times by +/- a few minutes, 
-         if it reduces overall "conflict" with busy usage.
-
-    Return:
-      {
-        "clusters": [
-          { "clusterId":"0", "deviceUuids":["ABC","DEF"], "updateTimeUtc":"2025-02-20T02:00:00Z" },
-          ...
-        ]
-      }
-    """
     data = request.get_json()
-    if not data or "clusters" not in data:
-        return jsonify({"error":"invalid input"}), 400
-
-    clusters = data["clusters"]
+    if "clusters" not in data:
+        return jsonify({"error":"No clusters found"}), 400
     
-    usage_map = {}  # deviceUuid -> busy fraction
-    # Let's assume we appended usage in "usageVectors"
-    if "usageVectors" in data:
-        for uv in data["usageVectors"]:
-            usage_map[uv["deviceUuid"]] = uv
+    clusters = data["clusters"]
+    aggregatorData = data.get("aggregatorData",[])
 
-    import datetime
+    # aggregatorData => array of objects:
+    # { "deviceUuid":"ABC","nextIdleTime":"2025-02-20T10:00:00Z","idleDurationSecs":40}, ...
+    idle_map = {}
+    for a in aggregatorData:
+        devUuid = a["deviceUuid"]
+        nxt = a["nextIdleTime"]
+        idSec= a["idleDurationSecs"]
+        idle_map[devUuid] = {
+            "nextIdleTime": nxt,
+            "idleDurationSecs": idSec
+        }
+
     now_utc = datetime.datetime.utcnow()
+    scheduled = []
 
-    # 1) Basic Heuristic: 
-    # For each cluster, we find an estimated UpdateTime that doesn't overlap with busy usage.
-    # We'll just guess "now + offset" based on average busy fraction. 
-    # e.g. if average busy fraction is high => we delay more
-    scheduled_clusters = []
-    base_offset_minutes = 0
-    for idx, c in enumerate(clusters):
-        cluster_id = c["clusterId"]
+    # Heuristic
+    base_offset = 0
+    for c in clusters:
+        cId = c["clusterId"]
         devs = c["deviceUuids"]
-        # compute average busy fraction
-        sum_busy = 0.0
-        dcount = 0
-        for d in devs:
-            if d in usage_map:
-                sum_busy += usage_map[d]["busyFraction"]
-                dcount += 1
-        avg_busy = (sum_busy / dcount) if dcount>0 else 0.5  # fallback
-        # if avg_busy is 0.8 => they're quite busy, let's offset more 
-        # e.g. offset = 10 + (avg_busy*20)
-        offset_this_cluster = 10 + (avg_busy * 20)
-        update_time = now_utc + datetime.timedelta(minutes=base_offset_minutes + offset_this_cluster)
+        # find minimal idle among them
+        earliest_dt=None
+        minIdleSec=999999
+        anyMissing=false
 
-        scheduled_clusters.append({
-            "clusterId": cluster_id,
+        for d in devs:
+            if d not in idle_map:
+                anyMissing=true
+                break
+            if idle_map[d]["nextIdleTime"] is None:
+                anyMissing=true
+                break
+
+        if anyMissing:
+            # aggregator says "no idle window" => skip scheduling
+            continue
+
+        # all present => pick earliest nextIdleTime
+        for d in devs:
+            dtstr= idle_map[d]["nextIdleTime"]
+            dtp= datetime.datetime.fromisoformat(dtstr.replace("Z",""))
+            idsec= idle_map[d]["idleDurationSecs"]
+            if dtp<earliest_dt or earliest_dt is None:
+                earliest_dt=dtp
+            if idsec<minIdleSec:
+                minIdleSec=idsec
+
+        # if minIdleSec<20 => skip
+        if minIdleSec<20 or earliest_dt is None:
+            continue
+
+        # let's schedule it at earliest_dt + base_offset
+        # this is naive => we will use LNS to refine it
+        st= earliest_dt + datetime.timedelta(minutes=base_offset)
+        # if st<now => shift it out
+        if st<now_utc:
+            st= now_utc + datetime.timedelta(seconds=10)
+
+        scheduled.append({
+            "clusterId": cId,
             "deviceUuids": devs,
-            "updateTimeUtc": update_time.isoformat() + "Z"
+            "updateTimeUtc": st.isoformat()+"Z"
         })
 
-        # increment base_offset_minutes for next cluster 
-        base_offset_minutes += 5  # naive stepping
+        base_offset+=2 # naive stepping
 
-    # 2) LNS step:
-    # We'll do a small "destroy and repair" 
-    # to try to reduce collisions if clusters have similar times 
-    # (real LNS might be more complex)
-    import random
-
+    # 2) LNS => reduce concurrency
     def conflict_metric(sched):
-        """
-        Simple conflict metric:
-         sum of overlap if times are within 5 minutes of each other 
-         ignoring the device usage detail for brevity
-        """
-        stimes = []
+        times=[]
         for sc in sched:
-            dt_parsed = datetime.datetime.fromisoformat(sc["updateTimeUtc"].replace("Z",""))
-            stimes.append(dt_parsed)
-        stimes.sort()
-        conflicts = 0
-        for i in range(len(stimes)-1):
-            diff = (stimes[i+1] - stimes[i]).total_seconds()/60.0
-            if diff < 5:
-                conflicts += (5 - diff)
-        return conflicts
+            dtp= datetime.datetime.fromisoformat(sc["updateTimeUtc"].replace("Z",""))
+            times.append(dtp)
+        times.sort()
+        c=0
+        for i in range(len(times)-1):
+            diff= (times[i+1]-times[i]).total_seconds()
+            if diff<30:
+                c+=(30-diff)
+        return c
 
-    original_conflict = conflict_metric(scheduled_clusters)
-    best_sched = scheduled_clusters[:]
-    best_conflict = original_conflict
+    best= scheduled[:]
+    best_conf= conflict_metric(best)
 
-    for iteration in range(10):  # 10 tries
-        # randomly pick half of them to "destroy" 
-        destroyed_indices = random.sample(range(len(best_sched)), len(best_sched)//2)
-        # for each destroyed, random shift by +/- 10-20 minutes
-        candidate = []
-        for i, sc in enumerate(best_sched):
-            if i not in destroyed_indices:
+    for _ in range(10):
+        if len(best)<2:
+            break
+        destroyCount= len(best)//2
+        destroyed= random.sample(range(len(best)), destroyCount)
+        candidate=[]
+        for i,sc in enumerate(best):
+            if i not in destroyed:
                 candidate.append(sc)
             else:
-                # shift
-                dt_parsed = datetime.datetime.fromisoformat(sc["updateTimeUtc"].replace("Z",""))
-                shift = random.randint(-20, 20)
-                new_time = dt_parsed + datetime.timedelta(minutes=shift)
-                new_sc = dict(sc)
-                new_sc["updateTimeUtc"] = new_time.isoformat() + "Z"
+                dtp= datetime.datetime.fromisoformat(sc["updateTimeUtc"].replace("Z",""))
+                shift= random.randint(-15,15)
+                new_dt= dtp+ datetime.timedelta(seconds=shift*10) # shift in multiples of 10s
+                new_sc= dict(sc)
+                new_sc["updateTimeUtc"]= new_dt.isoformat()+"Z"
                 candidate.append(new_sc)
+        cconf= conflict_metric(candidate)
+        if cconf<best_conf:
+            best_conf=cconf
+            best= candidate
 
-        cconf = conflict_metric(candidate)
-        if cconf < best_conflict:
-            best_conflict = cconf
-            best_sched = candidate
+    return jsonify({
+        "clusters": best
+    })
 
-    # now best_sched is our final
-    return jsonify({ "clusters": best_sched })
-
-
-if __name__ == "__main__":
-    # run on port 82, accessible by "http://127.0.0.1:82"
-    app.run(host="0.0.0.0", port=82, debug=False)
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=82, debug=False)
