@@ -14,10 +14,8 @@ namespace UpFlux.Gateway.Server.Services
     ///  - Network usage samples
     ///  - Timestamps of messages (to calculate the Busy fraction)
     /// 
-    /// Every time the Gateway receives monitoring data from a device, 
-    /// we store it here.
     /// 
-    /// Then, when the AI is called every 1-5 minutes, we compute:
+    /// AI is called every 1-5 minutes, to compute:
     ///   1) BusyFraction (based on # of messages in the last 6 minutes)
     ///   2) AvgCpu, AvgMem, AvgNet
     /// </summary>
@@ -25,16 +23,16 @@ namespace UpFlux.Gateway.Server.Services
     {
         private readonly ILogger<DeviceUsageAggregator> _logger;
 
-        // For each device, we store a list of usage samples 
+        // For each device, store a list of usage samples 
         // that occurred in the last 6 minutes
         private ConcurrentDictionary<string, List<UsageSample>> _deviceSamples;
 
-        // We'll keep data for up to 6 minutes (360 seconds).
+        // keep data for up to 6 minutes (360 seconds).
         private readonly TimeSpan _window = TimeSpan.FromMinutes(6);
 
-        // We assume the device tries to send data every 3s if Busy.
+        // if the device tries to send data every 3s if Busy.
         // That means in 6 minutes, a max of 120 samples are expected.
-        // We will remove older samples that exceed that window.
+        // remove older samples that exceed that window.
         public DeviceUsageAggregator(ILogger<DeviceUsageAggregator> logger)
         {
             _logger = logger;
@@ -42,8 +40,8 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Called by DeviceCommunicationService whenever we receive monitoring data 
-        /// from a device. We parse out CPU, mem, net usage, etc. and store it.
+        /// Called by DeviceCommunicationService whenever monitoring data is received
+        /// from a device. We parse out CPU, mem, net usage and store it.
         /// </summary>
         public void RecordUsage(
             string deviceUuid,
@@ -94,8 +92,7 @@ namespace UpFlux.Gateway.Server.Services
                 string deviceUuid = kvp.Key;
                 List<UsageSample> samples = kvp.Value;
 
-                // We'll consider only samples in [now - 6min, now].
-                // Then we compute:
+                // To consider only samples in [now - 6min, now].
                 //   count = # of samples
                 //   BusyFraction = count / maxPossible
                 //   avg cpu
@@ -123,7 +120,7 @@ namespace UpFlux.Gateway.Server.Services
                     continue;
                 }
 
-                // Suppose a device is "truly busy" if it sends data every 3s:
+                // if a device is "truly busy" if it sends data every 3s:
                 //  in 6 minutes, that's 120 samples. 
                 //  So busyFraction = count / 120.
                 int maxPossible = (int)(_window.TotalSeconds / 3.0);
@@ -146,6 +143,8 @@ namespace UpFlux.Gateway.Server.Services
             return result;
         }
     }
+
+
 
     /// <summary>
     /// Represents one usage sample from a single MonitoringData message.
@@ -171,5 +170,16 @@ namespace UpFlux.Gateway.Server.Services
         public double AvgCpu { get; set; }
         public double AvgMem { get; set; }
         public double AvgNet { get; set; }
+    }
+
+    /// <summary>
+    /// The aggregator's guessed next idle window.
+    /// If NextIdleTime is null => aggregator can't find a 20s window.
+    /// </summary>
+    public class DeviceIdleInfo
+    {
+        public string DeviceUuid { get; set; }
+        public DateTime? NextIdleTime { get; set; }
+        public int IdleDurationSecs { get; set; }
     }
 }

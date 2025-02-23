@@ -54,7 +54,7 @@ namespace UpFlux.Gateway.Server.Services
                     _logger.LogError(ex, "Error in AiIntegrationWorker loop.");
                 }
 
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                    await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
     }
