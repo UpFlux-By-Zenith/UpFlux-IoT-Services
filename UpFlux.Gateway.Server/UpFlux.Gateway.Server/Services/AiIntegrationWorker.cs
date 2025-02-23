@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using UpFlux.Gateway.Server.Repositories;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -15,16 +16,22 @@ namespace UpFlux.Gateway.Server.Services
         private readonly ILogger<AiIntegrationWorker> _logger;
         private readonly AiCommunicationService _aiService;
         private readonly ControlChannelWorker _controlChannelWorker;
+        private readonly DeviceRepository _deviceRepository;
+        private readonly DeviceUsageAggregator _usageAggregator;
 
         public AiIntegrationWorker(
             ILogger<AiIntegrationWorker> logger,
             AiCommunicationService aiService,
-            ControlChannelWorker controlChannelWorker
+            ControlChannelWorker controlChannelWorker,
+            DeviceRepository deviceRepository,
+            DeviceUsageAggregator usageAggregator
         )
         {
             _logger = logger;
             _aiService = aiService;
             _controlChannelWorker = controlChannelWorker;
+            _deviceRepository = deviceRepository;
+            _usageAggregator = usageAggregator;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -37,6 +44,41 @@ namespace UpFlux.Gateway.Server.Services
                     AiClusteringResult clusters = await _aiService.RunClusteringAsync();
                     if (clusters != null)
                     {
+                        // Build aggregatorData from aggregator's predicted idle window
+                        List<Models.Device> devices = _deviceRepository.GetAllDevices();
+                        List<object> aggregatorDataList = new List<object>();
+
+                        foreach (Models.Device dev in devices)
+                        {
+                            DeviceIdleInfo idleInfo = _usageAggregator.PredictNextIdleWindow(dev.UUID);
+                            if (idleInfo.NextIdleTime.HasValue && idleInfo.IdleDurationSecs >= 20)
+                            {
+                                aggregatorDataList.Add(new
+                                {
+                                    deviceUuid = dev.UUID,
+                                    nextIdleTime = idleInfo.NextIdleTime.Value.ToString("o"),
+                                    idleDurationSecs = idleInfo.IdleDurationSecs
+                                });
+                            }
+                            else
+                            {
+                                // not enough idle
+                                aggregatorDataList.Add(new
+                                {
+                                    deviceUuid = dev.UUID,
+                                    nextIdleTime = (string)null,
+                                    idleDurationSecs = 0
+                                });
+                            }
+                        }
+
+                        // Merge with cluster data for scheduling
+                        var schedulingInput = new
+                        {
+                            clusters = clusters.Clusters,
+                            plotData = clusters.PlotData,
+                            aggregatorData = aggregatorDataList
+                        };
                         // Run scheduling
                         AiSchedulingResult schedule = await _aiService.RunSchedulingAsync(clusters);
 
