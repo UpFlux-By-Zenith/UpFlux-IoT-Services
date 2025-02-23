@@ -142,9 +142,67 @@ namespace UpFlux.Gateway.Server.Services
 
             return result;
         }
+
+        /// <summary>
+        /// Predict an approximate next idle window for the device,
+        /// purely from aggregator stats. 
+        /// 
+        ///   If busyFraction>0.7 => device is "likely busy" => next idle is now+2min, duration=40s
+        ///   If busyFraction<0.2 => device is "likely idle" => next idle is now, duration=60s
+        ///   else => next idle is now+1min, duration=30s
+        ///   To be refined with a better approach
+        /// 
+        /// If idleDuration<20 => no recommended window (none).
+        /// </summary>
+        public DeviceIdleInfo PredictNextIdleWindow(string deviceUuid)
+        {
+            List<DeviceUsageVector> usageVectors = ComputeUsageVectors();
+            DeviceUsageVector? deviceVec = usageVectors.FirstOrDefault(v => v.DeviceUuid == deviceUuid);
+            if (deviceVec == null)
+            {
+                // no data => skip
+                return new DeviceIdleInfo { DeviceUuid = deviceUuid, NextIdleTime = null, IdleDurationSecs = 0 };
+            }
+
+            double bf = deviceVec.BusyFraction;
+            DateTime now = DateTime.UtcNow;
+            DateTime nextIdle = now;
+            int idleSecs = 0;
+
+            if (bf > 0.7)
+            {
+                nextIdle = now.AddMinutes(2);
+                idleSecs = 40;
+            }
+            else if (bf < 0.2)
+            {
+                nextIdle = now;
+                idleSecs = 60;
+            }
+            else
+            {
+                nextIdle = now.AddMinutes(1);
+                idleSecs = 30;
+            }
+
+            if (idleSecs < 20)
+            {
+                return new DeviceIdleInfo
+                {
+                    DeviceUuid = deviceUuid,
+                    NextIdleTime = null,
+                    IdleDurationSecs = 0
+                };
+            }
+
+            return new DeviceIdleInfo
+            {
+                DeviceUuid = deviceUuid,
+                NextIdleTime = nextIdle,
+                IdleDurationSecs = idleSecs
+            };
+        }
     }
-
-
 
     /// <summary>
     /// Represents one usage sample from a single MonitoringData message.
