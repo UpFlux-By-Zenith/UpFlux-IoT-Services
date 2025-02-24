@@ -49,6 +49,9 @@ message ControlMessage {
 
     // AI Clustering and Scheduling
     AIRecommendations aiRecommendations = 80;
+
+    // Scheduling Updates
+    ScheduledUpdate scheduledUpdate = 90;
   }
 }
 
@@ -202,4 +205,14 @@ message AIPlotPoint {
   double x = 2;
   double y = 3;
   string clusterId = 4;
+}
+
+// ===================== SCHEDULING UPDATES =====================
+message ScheduledUpdate {
+  string scheduleId = 1;         
+  repeated string deviceUuids = 2;  
+  string clusterId = 3;          
+  string fileName = 4;           
+  bytes packageData = 5;        
+  google.protobuf.Timestamp startTime = 6; 
 }
