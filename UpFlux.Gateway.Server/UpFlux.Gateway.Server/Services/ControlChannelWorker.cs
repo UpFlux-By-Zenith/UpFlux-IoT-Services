@@ -42,6 +42,11 @@ namespace UpFlux.Gateway.Server.Services
         // The gRPC channel to the Cloud
         private IClientStreamWriter<ControlMessage> _requestStream;
 
+        // A dictionary to keep track of scheduled updates
+        private Dictionary<string, ScheduledUpdateEntry> _scheduledUpdates = new Dictionary<string, ScheduledUpdateEntry>();
+
+        public Dictionary<string, ScheduledUpdateEntry> ScheduledUpdates => _scheduledUpdates;
+
         /// <summary>
         /// The constructor for the ControlChannelWorker.
         /// </summary>
@@ -167,6 +172,10 @@ namespace UpFlux.Gateway.Server.Services
 
                 case ControlMessage.PayloadOneofCase.AlertMessage:
                     _logger.LogInformation("Received an alert from Cloud? Usually it's Gateway→Cloud. Ignoring...");
+                    break;
+
+                case ControlMessage.PayloadOneofCase.ScheduledUpdate:
+                    await HandleScheduledUpdate(msg.ScheduledUpdate);
                     break;
 
                 default:
@@ -555,6 +564,47 @@ namespace UpFlux.Gateway.Server.Services
                 Protos.CommandType.Rollback => Enums.CommandType.Rollback,
                 _ => Enums.CommandType.Rollback, // default to unknown for now
             };
+        }
+
+        /// <summary>
+        /// To handle a ScheduledUpdate message from the Cloud.
+        /// </summary>
+        private async Task HandleScheduledUpdate(ScheduledUpdate su)
+        {
+            _logger.LogInformation("Received ScheduledUpdate: ID={0}, startTime={1}, fileName={2}",
+                su.ScheduleId, su.StartTime, su.FileName);
+
+            DateTime startUtc = su.StartTime.ToDateTime();
+            ScheduledUpdateEntry entry = new ScheduledUpdateEntry
+            {
+                ScheduleId = su.ScheduleId,
+                DeviceUuids = su.DeviceUuids.ToList(),
+                FileName = su.FileName,
+                PackageData = su.PackageData.ToByteArray(),
+                StartTimeUtc = startUtc
+            };
+
+            lock (_scheduledUpdates)
+            {
+                _scheduledUpdates[entry.ScheduleId] = entry;
+            }
+
+            // Acknowledge
+            if (_requestStream != null)
+            {
+                CommandResponse resp = new CommandResponse
+                {
+                    CommandId = su.ScheduleId,
+                    Success = true,
+                    Details = $"Scheduled update stored for {startUtc:o}"
+                };
+                ControlMessage msg = new ControlMessage
+                {
+                    SenderId = _gatewaySettings.GatewayId,
+                    CommandResponse = resp
+                };
+                await _requestStream.WriteAsync(msg);
+            }
         }
     }
 }
