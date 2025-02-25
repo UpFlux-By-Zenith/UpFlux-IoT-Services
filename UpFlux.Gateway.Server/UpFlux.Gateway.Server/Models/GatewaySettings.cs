@@ -84,6 +84,11 @@ namespace UpFlux.Gateway.Server.Models
         /// The Network Interface to use by gateway to speak with devices
         /// </summary>
         public string DeviceNetworkInterface { get; set; }
+
+        /// <summary>
+        /// Holds the address of the AI service
+        /// </summary>
+        public string AiServiceAddress { get; set; }
     }
 }
 

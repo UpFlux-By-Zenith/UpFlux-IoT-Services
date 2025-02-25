@@ -11,6 +11,7 @@ namespace UpFlux.Monitoring.Service
 {
     /// <summary>
     /// The background worker service that collects and sends system metrics and sensor data.
+    /// Now includes simulation logic to alternate between Busy (send data) and Idle (silent).
     /// </summary>
     public class Worker : BackgroundService
     {
@@ -19,6 +20,9 @@ namespace UpFlux.Monitoring.Service
         private readonly PythonScriptService _pythonScriptService;
         private readonly TcpClientService _tcpClientService;
         private readonly ServiceSettings _settings;
+
+        // The new simulation state manager
+        private readonly SimulationStateManager _stateManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Worker"/> class.
@@ -35,10 +39,15 @@ namespace UpFlux.Monitoring.Service
             _pythonScriptService = pythonScriptService;
             _tcpClientService = tcpClientService;
             _settings = settings.Value;
+
+            // Instantiate the SimulationStateManager so each device has 
+            // a unique Busy/Idle pattern
+            _stateManager = new SimulationStateManager();
         }
 
         /// <summary>
         /// Executes the background service.
+        /// Depending on Busy or Idle state, we send data or remain silent.
         /// </summary>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -54,6 +63,16 @@ namespace UpFlux.Monitoring.Service
                     // Check if license is valid
                     if (IsLicenseValid())
                     {
+
+                        // Determine if Busy or Idle
+                        SimulationState currentState = _stateManager.GetCurrentState();
+
+                        if (currentState == SimulationState.Idle)
+                        {
+                            _logger.LogInformation("Device {uuid} is currently IDLE, no data sent at {time}.", _settings.DeviceUuid, DateTimeOffset.Now);
+                            continue;
+                        }
+
                         _logger.LogInformation("License is valid. Proceeding to collect and send data.");
 
                         // Collect system metrics

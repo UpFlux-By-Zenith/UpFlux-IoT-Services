@@ -160,5 +160,50 @@ namespace UpFlux.Cloud.Simulator
             await _controlSvc.SendVersionDataRequestAsync(gatewayId);
             ConsoleSync.WriteLine($"VersionDataRequest sent to gateway [{gatewayId}].");
         }
+
+        /// <summary>
+        /// This method demonstrates scheduling a future update for the gateway.
+        /// </summary>
+        private async Task MenuScheduleFutureUpdate()
+        {
+            ConsoleSync.Write("Enter Gateway ID: ");
+            string gatewayId = (ConsoleSync.ReadLine() ?? "").Trim();
+
+            ConsoleSync.Write("Enter device UUID(s), comma-separated: ");
+            string line = ConsoleSync.ReadLine() ?? "";
+            string[] uuids = line.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+            ConsoleSync.Write("Path to .deb package: ");
+            string packagePath = ConsoleSync.ReadLine() ?? "";
+            if (!File.Exists(packagePath))
+            {
+                ConsoleSync.WriteLine("File not found. Aborting.");
+                return;
+            }
+            byte[] packageData = await File.ReadAllBytesAsync(packagePath);
+            string fileName = Path.GetFileName(packagePath);
+
+            ConsoleSync.Write("Enter start time offset in minutes from now: ");
+            string offsetStr = ConsoleSync.ReadLine();
+            if (!int.TryParse(offsetStr, out int offsetMin))
+            {
+                offsetMin = 2;
+            }
+            DateTime startTimeUtc = DateTime.UtcNow.AddMinutes(offsetMin);
+
+            string scheduleId = Guid.NewGuid().ToString("N");
+
+            await _controlSvc.SendScheduledUpdateAsync(
+                gatewayId,
+                scheduleId,
+                uuids,
+                fileName,
+                packageData,
+                startTimeUtc
+            );
+
+            ConsoleSync.WriteLine($"Scheduled update with ID={scheduleId} at {startTimeUtc:o} for devices={string.Join(',', uuids)}");
+        }
+
     }
 }

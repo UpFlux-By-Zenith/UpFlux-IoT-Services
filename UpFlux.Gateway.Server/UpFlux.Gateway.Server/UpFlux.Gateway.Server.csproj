@@ -32,10 +32,12 @@
     <PackageReference Include="System.Data.SQLite" Version="1.0.119" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="AIService\" />
-    <Folder Include="Certificates\" />
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="..\..\ai_script\**\*.*">
+			<Link>ai_script\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
 	<ItemGroup>
 		<Protobuf Include="Protos\controlchannel.proto" GrpcServices="Client"/>
