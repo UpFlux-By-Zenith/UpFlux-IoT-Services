@@ -30,7 +30,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y fakeroot dpkg-dev tar python3-apt
+        sudo apt-get install -y fakeroot dpkg-dev tar python3-apt dos2unix
 
     # Read version from version.txt
     - name: Read Version from version.txt
