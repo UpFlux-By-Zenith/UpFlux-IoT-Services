@@ -96,7 +96,7 @@ jobs:
     # Create the postinst script
     - name: Create postinst script
       run: |
-        cat <<EOF > debian/package/DEBIAN/postinst
+        cat << 'EOF' > debian/package/DEBIAN/postinst
         #!/bin/bash
         set -e
         
