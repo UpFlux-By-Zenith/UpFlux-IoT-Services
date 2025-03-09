@@ -96,6 +96,9 @@ namespace UpFlux.Cloud.Simulator
                 case ControlMessage.PayloadOneofCase.VersionDataResponse:
                     HandleVersionDataResponse(gatewayId, msg.VersionDataResponse);
                     break;
+                case ControlMessage.PayloadOneofCase.DeviceStatus:
+                    HandleDeviceStatus(gatewayId, msg.DeviceStatus);
+                    break;
                 default:
                     _logger.LogWarning("Received unknown message from [{0}] => {1}", gatewayId, msg.PayloadCase);
                     break;
@@ -185,6 +188,15 @@ namespace UpFlux.Cloud.Simulator
                 };
                 await writer.WriteAsync(responseMsg);
             }
+        }
+
+        // ---------- EXACT device status logic ----------
+        private void HandleDeviceStatus(string gatewayId, DeviceStatus status)
+        {
+            _logger.LogInformation(
+                "DeviceStatus from Gateway [{0}]: device={1}, isOnline={2}, changedAt={3}",
+                gatewayId, status.DeviceUuid, status.IsOnline, status.LastSeen
+            );
         }
 
         // ---------- EXACT version data logic ----------
