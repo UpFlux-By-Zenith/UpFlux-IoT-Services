@@ -24,6 +24,12 @@ namespace UpFlux.Monitoring.Service
         // The new simulation state manager
         private readonly SimulationStateManager _stateManager;
 
+        // The last state that was logged
+        private SimulationState _lastLoggedState = SimulationState.Busy;
+
+        // Tracks the last time the idle state was logged
+        private DateTime _lastIdleLogTime = DateTime.MinValue;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Worker"/> class.
         /// </summary>
@@ -69,7 +75,18 @@ namespace UpFlux.Monitoring.Service
 
                         if (currentState == SimulationState.Idle)
                         {
-                            _logger.LogInformation("Device {uuid} is currently IDLE, no data sent at {time}.", _settings.DeviceUuid, DateTimeOffset.Now);
+                            // Only log if transitioning to Idle or every 60 seconds
+                            if (_lastLoggedState != SimulationState.Idle ||
+                                (DateTime.UtcNow - _lastIdleLogTime).TotalSeconds >= 60)
+                            {
+                                _logger.LogInformation("Device {uuid} is currently IDLE, no data sent at {time}.",
+                                    _settings.DeviceUuid, DateTimeOffset.Now);
+
+                                _lastIdleLogTime = DateTime.UtcNow;
+                                _lastLoggedState = SimulationState.Idle;
+                            }
+
+                            await Task.Delay(_settings.MonitoringIntervalSeconds * 1000, stoppingToken);
                             continue;
                         }
 
