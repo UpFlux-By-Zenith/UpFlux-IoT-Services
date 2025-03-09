@@ -56,6 +56,7 @@ namespace UpFlux.Gateway.Server
             services.AddHostedService<DeviceDiscoveryService>();
             services.AddHostedService<AiIntegrationWorker>();
             services.AddHostedService<ScheduledUpdateWorker>();
+            services.AddHostedService<DevicePingService>();
         }
 
         /// <summary>
