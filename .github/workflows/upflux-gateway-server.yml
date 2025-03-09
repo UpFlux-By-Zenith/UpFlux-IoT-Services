@@ -146,6 +146,9 @@ jobs:
         
         # === AI SERVICE SETUP ===
         echo "Checking AI Service setup..."
+        echo "AI_DIR: $AI_DIR"
+        echo "AI_VENV: $AI_VENV"
+        echo "AI_SCRIPT: $AI_SCRIPT"
         
         # Set permissions on the ai_script directory
         chmod -R 755 "$AI_DIR"
@@ -155,14 +158,24 @@ jobs:
           echo "Creating Python virtual environment at $AI_VENV"
           python3 -m venv "$AI_VENV"
         fi
-        
-        # Activate the virtual environment and install dependencies
-        source "$AI_VENV/bin/activate"
-        pip install --upgrade pip
-        pip install flask scikit-learn numpy
-        
+
+        # Install dependencies only if venv exists
+        if [ -d "$AI_VENV" ]; then
+          echo "Activating AI Service virtual environment..."
+          source "$AI_VENV/bin/activate"
+          pip install --upgrade pip
+          pip install flask scikit-learn numpy
+          deactivate
+        else
+          echo "Error: AI virtual environment not found at $AI_VENV"
+        fi
+
         # Ensure AI script is executable
-        chmod +x "$AI_SCRIPT"
+        if [ -f "$AI_SCRIPT" ]; then
+          chmod +x "$AI_SCRIPT"
+        else
+          echo "Warning: AI script not found at $AI_SCRIPT"
+        fi
         
         echo "AI Service setup complete."
 
