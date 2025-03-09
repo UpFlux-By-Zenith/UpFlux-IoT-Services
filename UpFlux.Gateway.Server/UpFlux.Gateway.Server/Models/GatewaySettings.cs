@@ -94,6 +94,11 @@ namespace UpFlux.Gateway.Server.Models
         /// Holds the path to the AI service script
         /// </summary>
         public string AiServiceScriptPath { get; set; }
+
+        /// <summary>
+        /// Holds the Python interpreter to use for the AI service script
+        /// </summary>
+        public string AiServiceScriptPythonInterpreter { get; set; }
     }
 }
 
