@@ -89,6 +89,11 @@ namespace UpFlux.Gateway.Server.Models
         /// Holds the address of the AI service
         /// </summary>
         public string AiServiceAddress { get; set; }
+
+        /// <summary>
+        /// Holds the path to the AI service script
+        /// </summary>
+        public string AiServiceScriptPath { get; set; }
     }
 }
 
