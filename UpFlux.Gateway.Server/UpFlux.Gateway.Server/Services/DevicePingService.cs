@@ -76,6 +76,11 @@ namespace UpFlux.Gateway.Server.Services
 
             foreach (Device dev in devices)
             {
+                if (string.IsNullOrWhiteSpace(dev.UUID))
+                {
+                    continue;
+                }
+
                 if (string.IsNullOrWhiteSpace(dev.IPAddress))
                 {
                     continue;
