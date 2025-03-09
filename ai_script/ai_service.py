@@ -108,7 +108,7 @@ def scheduling():
             "idleDurationSecs": idSec
         }
 
-    now_utc = datetime.datetime.utcnow()
+    now_utc = datetime.datetime.now(datetime.UTC)
     scheduled = []
 
     # Heuristic
@@ -119,14 +119,14 @@ def scheduling():
         # find minimal idle among them
         earliest_dt=None
         minIdleSec=999999
-        anyMissing=false
+        anyMissing=False
 
         for d in devs:
             if d not in idle_map:
-                anyMissing=true
+                anyMissing=True
                 break
             if idle_map[d]["nextIdleTime"] is None:
-                anyMissing=true
+                anyMissing=True
                 break
 
         if anyMissing:
