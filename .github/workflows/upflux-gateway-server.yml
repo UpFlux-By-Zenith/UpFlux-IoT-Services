@@ -105,6 +105,9 @@ jobs:
         DB_FILE="\$DB_DIR/upflux_gateway.db"
         CLOUD_CONF="/etc/upflux/cloud_address.conf"
         APPSETTINGS="/opt/upflux-gateway-server/appsettings.json"
+        AI_DIR="/opt/upflux-gateway-server/ai_script"
+        AI_VENV="$AI_DIR/venv"
+        AI_SCRIPT="$AI_DIR/ai_service.py"
 
         # Ensure the database directory exists
         if [ ! -d "\$DB_DIR" ]; then
@@ -140,6 +143,28 @@ jobs:
         # Create the log directory if it doesn't exist
         mkdir -p /var/log/upflux/
         chmod 755 /var/log/upflux/
+        
+        # === AI SERVICE SETUP ===
+        echo "Checking AI Service setup..."
+        
+        # Set permissions on the ai_script directory
+        chmod -R 755 "$AI_DIR"
+        
+        # Check if the virtual environment exists
+        if [ ! -d "$AI_VENV" ]; then
+          echo "Creating Python virtual environment at $AI_VENV"
+          python3 -m venv "$AI_VENV"
+        fi
+        
+        # Activate the virtual environment and install dependencies
+        source "$AI_VENV/bin/activate"
+        pip install --upgrade pip
+        pip install flask scikit-learn numpy
+        
+        # Ensure AI script is executable
+        chmod +x "$AI_SCRIPT"
+        
+        echo "AI Service setup complete."
 
         # Reload systemd daemon
         systemctl daemon-reload
