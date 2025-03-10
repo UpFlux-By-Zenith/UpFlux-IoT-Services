@@ -51,8 +51,13 @@ namespace UpFlux.Gateway.Server.Repositories
         /// <param name="device">The device to add or update.</param>
         public void AddOrUpdateDevice(Device device)
         {
+            if (string.IsNullOrWhiteSpace(device.UUID))
+            {
+                return;
+            }
+
             using SqliteConnection connection = new SqliteConnection(_connectionString);
-            var existingDevice = GetDeviceByUuid(device.UUID);
+            Device existingDevice = GetDeviceByUuid(device.UUID);
 
             if (existingDevice == null)
             {

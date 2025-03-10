@@ -49,6 +49,8 @@ namespace UpFlux.Gateway.Server
             // 1) Explicitly register ControlChannelWorker as a singleton
             services.AddSingleton<ControlChannelWorker>();
 
+            services.AddSingleton<AiServiceRunner>(); 
+
             // 2) Also register it as a hosted service so that its ExecuteAsync runs
             services.AddHostedService(provider => provider.GetRequiredService<ControlChannelWorker>());
 
@@ -56,6 +58,8 @@ namespace UpFlux.Gateway.Server
             services.AddHostedService<DeviceDiscoveryService>();
             services.AddHostedService<AiIntegrationWorker>();
             services.AddHostedService<ScheduledUpdateWorker>();
+            services.AddHostedService<DevicePingService>();
+            services.AddHostedService<AiServiceWorker>();
         }
 
         /// <summary>

@@ -96,6 +96,12 @@ namespace UpFlux.Cloud.Simulator
                 case ControlMessage.PayloadOneofCase.VersionDataResponse:
                     HandleVersionDataResponse(gatewayId, msg.VersionDataResponse);
                     break;
+                case ControlMessage.PayloadOneofCase.AiRecommendations:
+                    HandleAiRecommendations(gatewayId, msg.AiRecommendations);
+                    break;
+                case ControlMessage.PayloadOneofCase.DeviceStatus:
+                    HandleDeviceStatus(gatewayId, msg.DeviceStatus);
+                    break;
                 default:
                     _logger.LogWarning("Received unknown message from [{0}] => {1}", gatewayId, msg.PayloadCase);
                     break;
@@ -187,6 +193,15 @@ namespace UpFlux.Cloud.Simulator
             }
         }
 
+        // ---------- EXACT device status logic ----------
+        private void HandleDeviceStatus(string gatewayId, DeviceStatus status)
+        {
+            _logger.LogInformation(
+                "DeviceStatus from Gateway [{0}]: device={1}, isOnline={2}, changedAt={3}",
+                gatewayId, status.DeviceUuid, status.IsOnline, status.LastSeen
+            );
+        }
+
         // ---------- EXACT version data logic ----------
         private void HandleVersionDataResponse(string gatewayId, VersionDataResponse resp)
         {
@@ -224,6 +239,24 @@ namespace UpFlux.Cloud.Simulator
                         _logger.LogInformation("  AVAILABLE => (none)");
                     }
                 }
+            }
+        }
+
+        // ---------- EXACT AI recommendations logic ----------
+        private void HandleAiRecommendations(string gatewayId, AIRecommendations aiRec)
+        {
+            _logger.LogInformation("AI Recommendations from [{0}]:", gatewayId);
+
+            foreach (AIScheduledCluster? cluster in aiRec.Clusters)
+            {
+                _logger.LogInformation(" Cluster={0}, updated={1}", cluster.ClusterId, cluster.UpdateTime.ToDateTime());
+                _logger.LogInformation("  Devices: {0}", string.Join(", ", cluster.DeviceUuids));
+            }
+
+            foreach (AIPlotPoint? plot in aiRec.PlotData)
+            {
+                _logger.LogInformation(" Plot: dev={0}, x={1}, y={2}, cluster={3}",
+                    plot.DeviceUuid, plot.X, plot.Y, plot.ClusterId);
             }
         }
 

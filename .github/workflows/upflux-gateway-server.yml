@@ -30,7 +30,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y fakeroot dpkg-dev tar python3-apt
+        sudo apt-get install -y fakeroot dpkg-dev tar python3-apt dos2unix
 
     # Read version from version.txt
     - name: Read Version from version.txt
@@ -105,6 +105,9 @@ jobs:
         DB_FILE="\$DB_DIR/upflux_gateway.db"
         CLOUD_CONF="/etc/upflux/cloud_address.conf"
         APPSETTINGS="/opt/upflux-gateway-server/appsettings.json"
+        AI_DIR="/opt/upflux-gateway-server/ai_script"
+        AI_VENV="opt/upflux-gateway-server/ai_script/venv"
+        AI_SCRIPT="opt/upflux-gateway-server/ai_script/ai_service.py"
 
         # Ensure the database directory exists
         if [ ! -d "\$DB_DIR" ]; then
@@ -140,6 +143,41 @@ jobs:
         # Create the log directory if it doesn't exist
         mkdir -p /var/log/upflux/
         chmod 755 /var/log/upflux/
+        
+        # === AI SERVICE SETUP ===
+        echo "Checking AI Service setup..."
+        echo "AI_DIR: \$AI_DIR"
+        echo "AI_VENV: \$AI_VENV"
+        echo "AI_SCRIPT: \$AI_SCRIPT"
+        
+        # Set permissions on the ai_script directory
+        chmod -R 755 "\$AI_DIR"
+        
+        # Check if the virtual environment exists
+        if [ ! -d "\$AI_VENV" ]; then
+          echo "Creating Python virtual environment at \$AI_VENV"
+          python3 -m venv "\$AI_VENV"
+        fi
+
+        # Install dependencies only if venv exists
+        if [ -d "\$AI_VENV" ]; then
+          echo "Activating AI Service virtual environment..."
+          source "\$AI_VENV/bin/activate"
+          pip install --upgrade pip
+          pip install flask scikit-learn numpy
+          deactivate
+        else
+          echo "Error: AI virtual environment not found at \$AI_VENV"
+        fi
+
+        # Ensure AI script is executable
+        if [ -f "\$AI_SCRIPT" ]; then
+          chmod +x "\$AI_SCRIPT"
+        else
+          echo "Warning: AI script not found at \$AI_SCRIPT"
+        fi
+        
+        echo "AI Service setup complete."
 
         # Reload systemd daemon
         systemctl daemon-reload
@@ -157,6 +195,7 @@ jobs:
         exit 0
         EOF
         chmod 755 debian/package/DEBIAN/postinst
+        dos2unix debian/package/DEBIAN/postinst
 
     # Create the prerm script
     - name: Create prerm script

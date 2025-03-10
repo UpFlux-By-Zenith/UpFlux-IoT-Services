@@ -606,5 +606,28 @@ namespace UpFlux.Gateway.Server.Services
                 await _requestStream.WriteAsync(msg);
             }
         }
+
+        /// <summary>
+        /// To send the DeviceStatus to the Cloud.
+        /// Note: This is called by DevicePingService when a device's status changes.
+        /// </summary>
+        public async Task SendDeviceStatusAsync(DeviceStatus statusMsg)
+        {
+            if (_requestStream == null)
+            {
+                _logger.LogWarning("No active Cloud connection to send device status");
+                return;
+            }
+
+            ControlMessage msg = new ControlMessage
+            {
+                SenderId = _gatewaySettings.GatewayId,
+                DeviceStatus = statusMsg
+            };
+
+            await _requestStream.WriteAsync(msg);
+            _logger.LogInformation("Sent DeviceStatus for {0} => isOnline={1}",
+                statusMsg.DeviceUuid, statusMsg.IsOnline);
+        }
     }
 }

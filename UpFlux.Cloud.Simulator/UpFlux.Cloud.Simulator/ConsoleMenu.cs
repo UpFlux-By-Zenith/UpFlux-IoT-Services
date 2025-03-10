@@ -43,7 +43,8 @@ namespace UpFlux.Cloud.Simulator
                 ConsoleSync.WriteLine("2) Request logs from device(s)");
                 ConsoleSync.WriteLine("3) Send update package to device(s)");
                 ConsoleSync.WriteLine("4) Request version info from device(s)");
-                ConsoleSync.WriteLine("5) Exit");
+                ConsoleSync.WriteLine("5) Schedule future update for device(s)");
+                ConsoleSync.WriteLine("6) Exit");
                 ConsoleSync.Write("Choose: ");
                 char key = ConsoleSync.ReadKey();
                 ConsoleSync.WriteLine("");
@@ -65,6 +66,10 @@ namespace UpFlux.Cloud.Simulator
                     await MenuRequestVersionData();
                 }
                 else if (key == '5')
+                {
+                    await MenuScheduleFutureUpdate();
+                }
+                else if (key == '6')
                 {
                     ConsoleSync.WriteLine("Exiting menu...");
                     break;

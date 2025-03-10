@@ -52,6 +52,9 @@ message ControlMessage {
 
     // Scheduling Updates
     ScheduledUpdate scheduledUpdate = 90;
+
+    // Device Status
+    DeviceStatus deviceStatus = 100;
   }
 }
 
@@ -215,4 +218,11 @@ message ScheduledUpdate {
   string fileName = 4;           
   bytes packageData = 5;        
   google.protobuf.Timestamp startTime = 6; 
+}
+
+// ====================== DEVICE STATUS =====================
+message DeviceStatus {
+  string deviceUuid = 1;
+  bool isOnline = 2;
+  google.protobuf.Timestamp lastSeen = 3;
 }
