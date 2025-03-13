@@ -146,7 +146,8 @@ message SensorData {
 message UpdatePackage {
   string fileName = 1;           // .deb package name
   bytes packageData = 2;         // The raw .deb 
-  repeated string targetDevices = 3;
+  bytes signatureData = 3;       // The signature of the .deb
+  repeated string targetDevices = 4;
 }
 
 message UpdateAck {

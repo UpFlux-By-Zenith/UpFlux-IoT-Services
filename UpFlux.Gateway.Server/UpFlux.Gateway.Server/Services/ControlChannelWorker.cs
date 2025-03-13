@@ -12,6 +12,7 @@ using Grpc.Net.Client;
 using Google.Protobuf.WellKnownTypes;
 using Google.Protobuf;
 using UpFlux.Gateway.Server.Repositories;
+using System.Diagnostics;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -367,6 +368,36 @@ namespace UpFlux.Gateway.Server.Services
             };
             await _requestStream.WriteAsync(ack);
         }
+
+        /// <summary>
+        /// Verifies the GPG signature of a package.
+        /// </summary>
+        private bool VerifySignature(string packagePath, string signaturePath)
+        {
+            try
+            {
+                ProcessStartInfo processStartInfo = new ProcessStartInfo
+                {
+                    FileName = "gpg",
+                    Arguments = $"--verify \"{signaturePath}\" \"{packagePath}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+
+                Process process = new Process { StartInfo = processStartInfo };
+                process.Start();
+                process.WaitForExit();
+
+                return process.ExitCode == 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error verifying signature: {ex.Message}");
+                return false;
+            }
+        }
+
 
         /// <summary>
         /// Request version data from all devices and send it to the Cloud.
