@@ -32,6 +32,7 @@ UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/UpFlux.Monitoring.Libr
 UpFlux.Monitoring.Library/UpFlux.Monitoring.Library.Tests/Properties/PublishProfiles/FolderProfile.pubxml.user
 UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator.csproj.user
 UpFlux.Cloud.Simulator/UpFlux.Cloud.Simulator/Properties/PublishProfiles/FolderProfile.pubxml.user
+UpFlux.Gateway.Server/UpFlux.Gateway.Server/Properties/PublishProfiles/FolderProfile.pubxml.user
 
 # Ignore  NuGet.config
 UpFlux.Monitoring.Service/NuGet.config

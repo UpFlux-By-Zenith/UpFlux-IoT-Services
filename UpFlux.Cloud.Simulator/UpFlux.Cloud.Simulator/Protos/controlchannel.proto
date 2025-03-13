@@ -218,7 +218,8 @@ message ScheduledUpdate {
   string clusterId = 3;          
   string fileName = 4;           
   bytes packageData = 5;        
-  google.protobuf.Timestamp startTime = 6; 
+  bytes signatureData = 6;
+  google.protobuf.Timestamp startTime = 7; 
 }
 
 // ====================== DEVICE STATUS =====================

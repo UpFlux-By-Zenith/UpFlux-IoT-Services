@@ -379,6 +379,7 @@ namespace UpFlux.Cloud.Simulator
         /// <param name="deviceUuids">The devices to target</param>
         /// <param name="fileName">The name of the update package</param>
         /// <param name="packageData">The binary data of the update package</param>
+        /// <param name="signatureData">The binary data of the package signature</param>
         /// <param name="startTimeUtc">The start time for the update</param>
         /// <returns>Returns the task for the async operation</returns>
         public async Task SendScheduledUpdateAsync(
@@ -387,6 +388,7 @@ namespace UpFlux.Cloud.Simulator
             string[] deviceUuids,
             string fileName,
             byte[] packageData,
+            byte[] signatureData,
             DateTime startTimeUtc
         )
         {
@@ -402,6 +404,7 @@ namespace UpFlux.Cloud.Simulator
                 ScheduleId = scheduleId,
                 FileName = fileName,
                 PackageData = Google.Protobuf.ByteString.CopyFrom(packageData),
+                SignatureData = Google.Protobuf.ByteString.CopyFrom(signatureData),
                 StartTime = Timestamp.FromDateTime(startTimeUtc.ToUniversalTime())
             };
             su.DeviceUuids.AddRange(deviceUuids);

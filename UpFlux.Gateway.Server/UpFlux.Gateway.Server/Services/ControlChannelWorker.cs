@@ -390,7 +390,7 @@ namespace UpFlux.Gateway.Server.Services
                 ProcessStartInfo processStartInfo = new ProcessStartInfo
                 {
                     FileName = "gpg",
-                    Arguments = $"--verify \"{signaturePath}\" \"{packagePath}\"",
+                    Arguments = $"--homedir \"/home/patrick/.gnupg\" --verify \"{signaturePath}\" \"{packagePath}\"",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false
@@ -398,9 +398,18 @@ namespace UpFlux.Gateway.Server.Services
 
                 Process process = new Process { StartInfo = processStartInfo };
                 process.Start();
+
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
 
-                return process.ExitCode == 0;
+                if (process.ExitCode != 0)
+                {
+                    _logger.LogError($"Error verifying signature: {error}");
+                    return false;
+                }
+
+                return true;
             }
             catch (Exception ex)
             {
@@ -615,6 +624,21 @@ namespace UpFlux.Gateway.Server.Services
         {
             _logger.LogInformation("Received ScheduledUpdate: ID={0}, startTime={1}, fileName={2}",
                 su.ScheduleId, su.StartTime, su.FileName);
+
+            string tempFilePath = Path.GetTempFileName();
+            string signatureFilePath = tempFilePath + ".sig";
+
+            await File.WriteAllBytesAsync(tempFilePath, su.PackageData.ToByteArray());
+            await File.WriteAllBytesAsync(signatureFilePath, su.SignatureData.ToByteArray());
+
+            bool verified = VerifySignature(tempFilePath, signatureFilePath);
+            if (!verified)
+            {
+                _logger.LogError("Signature verification failed for scheduled update '{file}'", su.FileName);
+                return;
+            }
+
+            _logger.LogInformation("Signature verification succeeded. Proceeding with scheduling.");
 
             DateTime startUtc = su.StartTime.ToDateTime();
             ScheduledUpdateEntry entry = new ScheduledUpdateEntry

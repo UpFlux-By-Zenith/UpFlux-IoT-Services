@@ -174,10 +174,16 @@ namespace UpFlux.Cloud.Simulator
         {
             try
             {
+                string? gpgPassphrase = _cloudSettings.GpgPassphrase;
+                string gpgKeyId = "3ADAF9875CB265A5C41016D2B1902804CC7BF808";
+
+                ConsoleSync.WriteLine($"GPG_PASSPHRASE: {gpgPassphrase}");
+                Console.WriteLine($"GPG_KEY_ID: {gpgKeyId}");
+
                 ProcessStartInfo processStartInfo = new ProcessStartInfo
                 {
                     FileName = "gpg",
-                    Arguments = $"--batch --pinentry-mode=loopback --passphrase \"$GPG_PASSPHRASE\" --yes --armor --output \"{signaturePath}\" --detach-sign --default-key \"UpFlux (This key is to be used for the signing and verification of the update packages for UpFlux) <ubyzenith@gmail.com>\" \"{filePath}\"",
+                    Arguments = $"--homedir \"/home/pi/.gnupg\" --batch --pinentry-mode=loopback --passphrase \"{gpgPassphrase}\" --yes --armor --output \"{signaturePath}\" --detach-sign -u \"{gpgKeyId}\" \"{filePath}\"",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false
@@ -185,9 +191,18 @@ namespace UpFlux.Cloud.Simulator
 
                 Process process = new Process { StartInfo = processStartInfo };
                 process.Start();
+
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
 
-                return process.ExitCode == 0;
+                if (process.ExitCode != 0)
+                {
+                    ConsoleSync.WriteLine($"Error signing file: {error}");
+                    return false;
+                }
+
+                return true;
             }
             catch (Exception ex)
             {
@@ -227,8 +242,20 @@ namespace UpFlux.Cloud.Simulator
                 ConsoleSync.WriteLine("File not found. Aborting.");
                 return;
             }
-            byte[] packageData = await File.ReadAllBytesAsync(packagePath);
+
             string fileName = Path.GetFileName(packagePath);
+            string signatureFile = packagePath + ".sig";
+            Console.WriteLine($"Signing {fileName} using GPG...");
+
+            bool signed = SignPackage(packagePath, signatureFile);
+            if (!signed)
+            {
+                ConsoleSync.WriteLine("Signing failed. Aborting.");
+                return;
+            }
+
+            byte[] packageData = await File.ReadAllBytesAsync(packagePath);
+            byte[] signatureData = await File.ReadAllBytesAsync(signatureFile);
 
             ConsoleSync.Write("Enter start time offset in minutes from now: ");
             string offsetStr = ConsoleSync.ReadLine();
@@ -246,6 +273,7 @@ namespace UpFlux.Cloud.Simulator
                 uuids,
                 fileName,
                 packageData,
+                signatureData,
                 startTimeUtc
             );
 
