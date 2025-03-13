@@ -321,7 +321,7 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Passes the UpdatePackage to the UpdateManagementService for processing.
+        /// Verifies and Passes the UpdatePackage to the UpdateManagementService for processing.
         /// </summary>
         private async Task HandleUpdatePackage(Protos.UpdatePackage pkg)
         {
@@ -330,7 +330,18 @@ namespace UpFlux.Gateway.Server.Services
 
             // Save the package data to a temporary file
             string tempFilePath = Path.GetTempFileName();
+            string signatureFilePath = tempFilePath + ".sig";
+
             await File.WriteAllBytesAsync(tempFilePath, pkg.PackageData.ToByteArray());
+            await File.WriteAllBytesAsync(signatureFilePath, pkg.SignatureData.ToByteArray());
+
+            bool verified = VerifySignature(tempFilePath, signatureFilePath);
+            if (!verified) {
+                _logger.LogError("Signature verification failed for package '{file}'", pkg.FileName);
+                return;
+            }
+
+            _logger.LogInformation("Signature verification succeeded. Proceeding with distribution.");
 
             // Create UpdatePackage model
             Models.UpdatePackage updatePackage = new Models.UpdatePackage
