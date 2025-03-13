@@ -128,7 +128,7 @@ namespace UpFlux.Cloud.Simulator
         }
 
         /// <summary>
-        /// Demonstrates sending an update package to the gateway for the specified devices.
+        /// Signs the update package and sends it to the Gateway for the specified devices.
         /// </summary>
         private async Task MenuSendUpdate()
         {
@@ -148,9 +148,21 @@ namespace UpFlux.Cloud.Simulator
             }
 
             string fileName = System.IO.Path.GetFileName(packagePath);
-            byte[] packageData = await System.IO.File.ReadAllBytesAsync(packagePath);
+            string signatureFile = packagePath + ".sig";
 
-            await _controlSvc.SendUpdatePackageAsync(gatewayId, fileName, packageData, uuids);
+            ConsoleSync.WriteLine($"Signing {fileName} using GPG...");
+
+            bool signed = SignPackage(packagePath, signatureFile);
+            if (!signed)
+            {
+                ConsoleSync.WriteLine("Signing failed. Aborting.");
+                return;
+            }
+
+            byte[] packageData = await System.IO.File.ReadAllBytesAsync(packagePath);
+            byte[] signatureData = await File.ReadAllBytesAsync(signatureFile);
+
+            await _controlSvc.SendUpdatePackageAsync(gatewayId, fileName, packageData, signatureData, uuids);
 
             ConsoleSync.WriteLine($"Update package '{fileName}' sent to gateway [{gatewayId}] for {uuids.Length} device(s).");
         }

@@ -323,7 +323,7 @@ namespace UpFlux.Cloud.Simulator
         /// <summary>
         /// Sends an update package to the gateway, which should forward/install it on the specified devices.
         /// </summary>
-        public async Task SendUpdatePackageAsync(string gatewayId, string fileName, byte[] packageData, string[] targetDevices)
+        public async Task SendUpdatePackageAsync(string gatewayId, string fileName, byte[] packageData, byte[] signatureData, string[] targetDevices)
         {
             if (!_connectedGateways.TryGetValue(gatewayId, out IServerStreamWriter<ControlMessage>? writer))
             {
@@ -334,7 +334,8 @@ namespace UpFlux.Cloud.Simulator
             UpdatePackage update = new UpdatePackage
             {
                 FileName = fileName,
-                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData)
+                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData),
+                SignatureData = Google.Protobuf.ByteString.CopyFrom(signatureData)
             };
             update.TargetDevices.AddRange(targetDevices);
 
