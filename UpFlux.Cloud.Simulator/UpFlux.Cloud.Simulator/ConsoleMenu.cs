@@ -6,6 +6,7 @@ using Grpc.Net.Client;
 using Grpc.Core;
 using System.Net.Http;
 using UpFlux.Cloud.Simulator.Protos;
+using System.Diagnostics;
 
 namespace UpFlux.Cloud.Simulator
 {
@@ -152,6 +153,35 @@ namespace UpFlux.Cloud.Simulator
             await _controlSvc.SendUpdatePackageAsync(gatewayId, fileName, packageData, uuids);
 
             ConsoleSync.WriteLine($"Update package '{fileName}' sent to gateway [{gatewayId}] for {uuids.Length} device(s).");
+        }
+
+        /// <summary>
+        /// Signs a package using GPG.
+        /// </summary>
+        private bool SignPackage(string filePath, string signaturePath)
+        {
+            try
+            {
+                ProcessStartInfo processStartInfo = new ProcessStartInfo
+                {
+                    FileName = "gpg",
+                    Arguments = $"--batch --pinentry-mode=loopback --passphrase \"$GPG_PASSPHRASE\" --yes --armor --output \"{signaturePath}\" --detach-sign --default-key \"UpFlux (This key is to be used for the signing and verification of the update packages for UpFlux) <ubyzenith@gmail.com>\" \"{filePath}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+
+                Process process = new Process { StartInfo = processStartInfo };
+                process.Start();
+                process.WaitForExit();
+
+                return process.ExitCode == 0;
+            }
+            catch (Exception ex)
+            {
+                ConsoleSync.WriteLine($"Error signing file: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>
