@@ -223,5 +223,44 @@ namespace UpFlux.Monitoring.Service
                 _logger.LogError(ex, "Error during license renewal communication with the server.");
             }
         }
+
+        /// <summary>
+        /// This method sends a notification message to the Gateway Server.
+        /// </summary>
+        /// <param name="message">The notification message to send.</param>
+        /// <returns>Returns a Task representing the asynchronous operation.</returns>
+        public async Task SendNotificationAsync(string message)
+        {
+            try
+            {
+                using TcpClient client = new TcpClient();
+                await client.ConnectAsync(_serverIp, _serverPort);
+
+                using NetworkStream networkStream = client.GetStream();
+
+                _logger.LogInformation("Connection established with the Gateway Server for notification.");
+
+                // Send Device UUID to the Gateway Server
+                string uuidMessage = $"UUID:{_settings.DeviceUuid}\n";
+                byte[] uuidBytes = Encoding.UTF8.GetBytes(uuidMessage);
+                await networkStream.WriteAsync(uuidBytes, 0, uuidBytes.Length);
+                await networkStream.FlushAsync();
+
+                // Wait for a short time before sending so that the server can process the UUID
+                await Task.Delay(100);
+
+                // Send the notification message
+                string notificationMessage = $"NOTIFICATION:{message}\n";
+                byte[] messageBytes = Encoding.UTF8.GetBytes(notificationMessage);
+                await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                await networkStream.FlushAsync();
+
+                _logger.LogInformation("Notification sent to Gateway Server: {message}", message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send notification to Gateway Server.");
+            }
+        }
     }
 }
