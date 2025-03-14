@@ -283,10 +283,16 @@ namespace UpFlux.Gateway.Server.Services
         {
             _logger.LogInformation("Received notification from device UUID: {uuid}: {notification}", device.UUID, notification);
 
+            string level = "Information";
+            if (notification.StartsWith("Sensor Error"))
+            {
+                level = "Error";
+            }
+
             AlertMessage alert = new AlertMessage
             {
                 Timestamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
-                Level = "Information",
+                Level = level,
                 Message = notification,
                 Source = $"Device-{device.UUID}"
             };
