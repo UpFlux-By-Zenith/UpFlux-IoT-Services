@@ -110,20 +110,9 @@ class ColorSensor:
                 #print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
 
                 #print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
+                
+                error_msg = ""
 				
-				# Create a dictionary with the RGB values
-                sensor_data = {
-                    "red_value": red_value,
-                    "green_value": green_value,
-                    "blue_value": blue_value
-                }
-				
-				# Output the JSON-formatted sensor data
-                print(json.dumps(sensor_data), flush=True)
-
-                # Log the sensor data if needed
-                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
-
                 if self.buzzer_condition(red_value, green_value, blue_value):
                     #print("Buzzer activated")
                     logging.error(
@@ -131,9 +120,24 @@ class ColorSensor:
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
                     )
                     self.activate_buzzer()
+                    error_msg = "Color out of threshold"
                 else:
                     logging.info("Valid color detected")
                     
+                # Create a dictionary with the RGB values
+                sensor_data = {
+                    "red_value": red_value,
+                    "green_value": green_value,
+                    "blue_value": blue_value,
+                    "error": error_msg
+                }
+                
+                # Output the JSON-formatted sensor data
+                print(json.dumps(sensor_data), flush=True)
+                
+                # Log the sensor data if needed
+                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
+                
                 time.sleep(2)
 
             except Exception as e:
