@@ -58,14 +58,14 @@ try:
     while True:
         log_data = get_log_tail() 
         
-        if is_installation_failed(log_data):
-            GPIO.output(GREEN_LED, GPIO.LOW)
-            GPIO.output(YELLOW_LED, GPIO.LOW)
-            GPIO.output(RED_LED, GPIO.HIGH)
-        elif is_package_installing():
+       	if is_package_installing():
             GPIO.output(GREEN_LED, GPIO.LOW)
             GPIO.output(RED_LED, GPIO.LOW)
             GPIO.output(YELLOW_LED, GPIO.HIGH)
+        elif is_installation_failed(log_data):
+            GPIO.output(GREEN_LED, GPIO.LOW)
+            GPIO.output(YELLOW_LED, GPIO.LOW)
+            GPIO.output(RED_LED, GPIO.HIGH)
         elif is_installation_success(log_data):
             set_green_default()
         else:
