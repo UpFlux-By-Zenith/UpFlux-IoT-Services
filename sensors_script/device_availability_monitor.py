@@ -10,6 +10,7 @@ GPIO.setmode(GPIO.BCM)
 GREEN_LED = 21
 YELLOW_LED = 13
 RED_LED = 5
+WARMUP_PIN = 16
 
 DPKG_LOG_PATH = '/var/log/dpkg.log'
 UPFLUX_LOG_PATH = '/var/log/upflux/upflux-sensors.log'
@@ -17,11 +18,22 @@ UPFLUX_LOG_PATH = '/var/log/upflux/upflux-sensors.log'
 GPIO.setup(GREEN_LED, GPIO.OUT)
 GPIO.setup(YELLOW_LED, GPIO.OUT)
 GPIO.setup(RED_LED, GPIO.OUT)
+GPIO.setup(WARMUP_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
-def set_green_default():
+def set_green_led():
     GPIO.output(GREEN_LED, GPIO.HIGH)
     GPIO.output(YELLOW_LED, GPIO.LOW)
     GPIO.output(RED_LED, GPIO.LOW)
+
+def set_yellow_led():
+    GPIO.output(GREEN_LED, GPIO.LOW)
+    GPIO.output(YELLOW_LED, GPIO.HIGH)
+    GPIO.output(RED_LED, GPIO.LOW)
+
+def set_red_led():
+    GPIO.output(GREEN_LED, GPIO.LOW)
+    GPIO.output(YELLOW_LED, GPIO.LOW)
+    GPIO.output(RED_LED, GPIO.HIGH)
 
 def is_package_installing():
     """
@@ -54,22 +66,23 @@ def is_installation_failed(log_data):
 def is_installation_success(log_data):
     return "status installed" in log_data[0]
 
+def is_rgb_sensor_warming_up():
+    return GPIO.input(WARMUP_PIN) == GPIO.HIGH
+
 try:
     while True:
         log_data = get_log_tail() 
         
-        if is_installation_failed(log_data):
-            GPIO.output(GREEN_LED, GPIO.LOW)
-            GPIO.output(YELLOW_LED, GPIO.LOW)
-            GPIO.output(RED_LED, GPIO.HIGH)
+        if is_rgb_sensor_warming_up(): 
+            set_yellow_led()
         elif is_package_installing():
-            GPIO.output(GREEN_LED, GPIO.LOW)
-            GPIO.output(RED_LED, GPIO.LOW)
-            GPIO.output(YELLOW_LED, GPIO.HIGH)
+            set_yellow_led()
+        elif is_installation_failed(log_data):
+            set_red_led()
         elif is_installation_success(log_data):
-            set_green_default()
+            set_green_led()
         else:
-            set_green_default()
+            set_green_led()
 
         time.sleep(2)
 
