@@ -18,7 +18,7 @@ S2_PIN = 17
 S3_PIN = 27
 BUZZER_PIN = 25
 LED_PIN = 24 
-
+WARMUP_PIN = 16
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
@@ -42,6 +42,8 @@ class ColorSensor:
         GPIO.setup(S3_PIN, GPIO.OUT)
         GPIO.setup(OE_PIN, GPIO.OUT)
         GPIO.setup(LED_PIN, GPIO.OUT)
+        GPIO.setup(WARMUP_PIN, GPIO.OUT)
+        GPIO.output(WARMUP_PIN, GPIO.LOW)
         
         GPIO.output(OE_PIN, GPIO.LOW)
         GPIO.output(S0_PIN, GPIO.HIGH)
@@ -51,6 +53,17 @@ class ColorSensor:
 
         global pwm
         pwm = GPIO.PWM(BUZZER_PIN, 1000) 
+
+    def warmup_sensor(self):
+        """ Warm-up the sensor by waiting and discarding initial readings """
+        GPIO.output(WARMUP_PIN, GPIO.HIGH)  # Signal Warmup
+
+        for _ in range(1):
+            self.measure_color_frequency('red')
+            self.measure_color_frequency('blue')
+            self.measure_color_frequency('green')
+            time.sleep(0.1)
+        GPIO.output(WARMUP_PIN, GPIO.LOW)  
         
     def buzzer_condition(self, red_value, green_value, blue_value):
         return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
