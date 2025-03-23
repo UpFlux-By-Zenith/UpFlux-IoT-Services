@@ -22,16 +22,17 @@ WARMUP_PIN = 16
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
-GREEN_THRESHOLD = 200
-BLUE_THRESHOLD = 200
+GREEN_THRESHOLD = 60
+BLUE_THRESHOLD = 80
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
-FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
+FREQ_MAX = {'red': 4000, 'green': 4000, 'blue': 6000}  
 
 class ColorSensor:
     def __init__(self):
         self.pwm = None
         self.setup_gpio()
+        self.warmup_sensor()
         
     def setup_gpio(self):
         GPIO.setmode(GPIO.BCM)
@@ -66,7 +67,11 @@ class ColorSensor:
         GPIO.output(WARMUP_PIN, GPIO.LOW)  
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
+
+    	if red_value > 200 and blue_value > 200 and green_value > 200:
+            return False
+
+    	return True
 
     def activate_buzzer(self):
         pwm.start(50)  
