@@ -23,7 +23,7 @@ MIN_SAMPLES = 2
 def clustering():
     """
     Input: JSON array of { "deviceUuid": "...", "busyFraction": 0.7, "avgCpu": ..., "avgMem": ..., "avgNet": ... }
-    We'll create a Nx4 matrix, run DBSCAN, do PCA(2D), 
+    This will create a Nx4 matrix, run DBSCAN, do PCA(2D), 
     return { "clusters": [ { "clusterId":"0", "deviceUuids":[] }, ...],
              "plotData": [ { "deviceUuid":"...", "x":..., "y":..., "clusterId":"..." }, ... ] }
     """
@@ -51,7 +51,7 @@ def clustering():
             "plotData": []
         })
 
-    # Normalize the data to have zero mean and unit variance.
+    # Normalize the data to have zero mean and unit variance - this will help position at the origin.
     scaler = StandardScaler()
     arr_normalized = scaler.fit_transform(arr)
     
