@@ -156,7 +156,7 @@ class ColorSensor:
                 print(json.dumps(sensor_data), flush=True)
                 
                 # Log the sensor data if needed
-                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
+                #logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
 
             except Exception as e:
                 logging.error(f"error occurred: {e}", exc_info=True)
