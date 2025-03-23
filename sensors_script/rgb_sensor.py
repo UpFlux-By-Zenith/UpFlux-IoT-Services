@@ -20,14 +20,13 @@ BUZZER_PIN = 25
 LED_PIN = 24 
 WARMUP_PIN = 16
 
-
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
 GREEN_THRESHOLD = 60
 BLUE_THRESHOLD = 80
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
-FREQ_MAX = {'red': 4000, 'green': 4000, 'blue': 3000}  
+FREQ_MAX = {'red': 4000, 'green': 4000, 'blue': 6000}  
 
 class ColorSensor:
     def __init__(self):
@@ -70,7 +69,7 @@ class ColorSensor:
         
     def buzzer_condition(self, red_value, green_value, blue_value):
 
-    	if blue_value > 150 and blue_value > (red_value + 20) and blue_value > (green_value + 20):
+    	if red_value > 200 and blue_value > 200 and green_value > 200:
             return False
 
     	return True
