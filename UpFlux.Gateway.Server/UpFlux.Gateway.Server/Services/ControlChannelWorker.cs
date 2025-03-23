@@ -12,6 +12,7 @@ using Grpc.Net.Client;
 using Google.Protobuf.WellKnownTypes;
 using Google.Protobuf;
 using UpFlux.Gateway.Server.Repositories;
+using System.Diagnostics;
 
 namespace UpFlux.Gateway.Server.Services
 {
@@ -320,7 +321,7 @@ namespace UpFlux.Gateway.Server.Services
         }
 
         /// <summary>
-        /// Passes the UpdatePackage to the UpdateManagementService for processing.
+        /// Verifies and Passes the UpdatePackage to the UpdateManagementService for processing.
         /// </summary>
         private async Task HandleUpdatePackage(Protos.UpdatePackage pkg)
         {
@@ -329,7 +330,18 @@ namespace UpFlux.Gateway.Server.Services
 
             // Save the package data to a temporary file
             string tempFilePath = Path.GetTempFileName();
+            string signatureFilePath = tempFilePath + ".sig";
+
             await File.WriteAllBytesAsync(tempFilePath, pkg.PackageData.ToByteArray());
+            await File.WriteAllBytesAsync(signatureFilePath, pkg.SignatureData.ToByteArray());
+
+            bool verified = VerifySignature(tempFilePath, signatureFilePath);
+            if (!verified) {
+                _logger.LogError("Signature verification failed for package '{file}'", pkg.FileName);
+                return;
+            }
+
+            _logger.LogInformation("Signature verification succeeded. Proceeding with distribution.");
 
             // Create UpdatePackage model
             Models.UpdatePackage updatePackage = new Models.UpdatePackage
@@ -367,6 +379,45 @@ namespace UpFlux.Gateway.Server.Services
             };
             await _requestStream.WriteAsync(ack);
         }
+
+        /// <summary>
+        /// Verifies the GPG signature of a package.
+        /// </summary>
+        private bool VerifySignature(string packagePath, string signaturePath)
+        {
+            try
+            {
+                ProcessStartInfo processStartInfo = new ProcessStartInfo
+                {
+                    FileName = "gpg",
+                    Arguments = $"--homedir \"/home/patrick/.gnupg\" --verify \"{signaturePath}\" \"{packagePath}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                };
+
+                Process process = new Process { StartInfo = processStartInfo };
+                process.Start();
+
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    _logger.LogError($"Error verifying signature: {error}");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error verifying signature: {ex.Message}");
+                return false;
+            }
+        }
+
 
         /// <summary>
         /// Request version data from all devices and send it to the Cloud.
@@ -573,6 +624,21 @@ namespace UpFlux.Gateway.Server.Services
         {
             _logger.LogInformation("Received ScheduledUpdate: ID={0}, startTime={1}, fileName={2}",
                 su.ScheduleId, su.StartTime, su.FileName);
+
+            string tempFilePath = Path.GetTempFileName();
+            string signatureFilePath = tempFilePath + ".sig";
+
+            await File.WriteAllBytesAsync(tempFilePath, su.PackageData.ToByteArray());
+            await File.WriteAllBytesAsync(signatureFilePath, su.SignatureData.ToByteArray());
+
+            bool verified = VerifySignature(tempFilePath, signatureFilePath);
+            if (!verified)
+            {
+                _logger.LogError("Signature verification failed for scheduled update '{file}'", su.FileName);
+                return;
+            }
+
+            _logger.LogInformation("Signature verification succeeded. Proceeding with scheduling.");
 
             DateTime startUtc = su.StartTime.ToDateTime();
             ScheduledUpdateEntry entry = new ScheduledUpdateEntry

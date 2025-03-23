@@ -22,16 +22,17 @@ WARMUP_PIN = 16
 
 NUM_CYCLES = 10 
 RED_THRESHOLD = 200
-GREEN_THRESHOLD = 200
-BLUE_THRESHOLD = 200
+GREEN_THRESHOLD = 60
+BLUE_THRESHOLD = 80
  
 FREQ_MIN = {'red': 500, 'green': 500, 'blue': 500}
-FREQ_MAX = {'red': 3000, 'green': 3000, 'blue': 3000}  
+FREQ_MAX = {'red': 4000, 'green': 4000, 'blue': 6000}  
 
 class ColorSensor:
     def __init__(self):
         self.pwm = None
         self.setup_gpio()
+        self.warmup_sensor()
         
     def setup_gpio(self):
         GPIO.setmode(GPIO.BCM)
@@ -57,6 +58,7 @@ class ColorSensor:
     def warmup_sensor(self):
         """ Warm-up the sensor by waiting and discarding initial readings """
         GPIO.output(WARMUP_PIN, GPIO.HIGH)  # Signal Warmup
+        time.sleep(2)
 
         for _ in range(1):
             self.measure_color_frequency('red')
@@ -66,7 +68,11 @@ class ColorSensor:
         GPIO.output(WARMUP_PIN, GPIO.LOW)  
         
     def buzzer_condition(self, red_value, green_value, blue_value):
-        return  red_value < RED_THRESHOLD or green_value < GREEN_THRESHOLD or blue_value < BLUE_THRESHOLD
+
+    	if red_value > 200 and blue_value > 200 and green_value > 200:
+            return False
+
+    	return True
 
     def activate_buzzer(self):
         pwm.start(50)  
@@ -123,20 +129,9 @@ class ColorSensor:
                 #print(f"Green frequency: {green_freq} Hz -> RGB value: {green_value}")
 
                 #print(f"RGB Values -> {red_value}, {green_value}, {blue_value}")
+                
+                error_msg = ""
 				
-				# Create a dictionary with the RGB values
-                sensor_data = {
-                    "red_value": red_value,
-                    "green_value": green_value,
-                    "blue_value": blue_value
-                }
-				
-				# Output the JSON-formatted sensor data
-                print(json.dumps(sensor_data), flush=True)
-
-                # Log the sensor data if needed
-                logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
-
                 if self.buzzer_condition(red_value, green_value, blue_value):
                     #print("Buzzer activated")
                     logging.error(
@@ -144,10 +139,24 @@ class ColorSensor:
                         f"(R > {RED_THRESHOLD}, G < {GREEN_THRESHOLD}, B < {BLUE_THRESHOLD})"
                     )
                     self.activate_buzzer()
+                    error_msg = "Color out of threshold"
                 else:
                     logging.info("Valid color detected")
-                    
                 time.sleep(2)
+                    
+                # Create a dictionary with the RGB values
+                sensor_data = {
+                    "red_value": red_value,
+                    "green_value": green_value,
+                    "blue_value": blue_value,
+                    "error": error_msg
+                }
+                
+                # Output the JSON-formatted sensor data
+                print(json.dumps(sensor_data), flush=True)
+                
+                # Log the sensor data if needed
+                #logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
 
             except Exception as e:
                 logging.error(f"error occurred: {e}", exc_info=True)

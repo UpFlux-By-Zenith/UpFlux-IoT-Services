@@ -127,6 +127,15 @@ namespace UpFlux.Monitoring.Service
                         // Send the data via TCP
                         await _tcpClientService.SendDataAsync(jsonData);
 
+                        if (sensorValues != null && !string.IsNullOrEmpty(sensorValues.error)) {
+                            string notificationMsg = $"Sensor Error: {sensorValues.error} | " +
+                             $"R={sensorValues.red_value}, " +
+                             $"G={sensorValues.green_value}, " +
+                             $"B={sensorValues.blue_value}";
+
+                            await _tcpClientService.SendNotificationAsync(notificationMsg);
+                        }
+
                         _logger.LogInformation("Data sent successfully at: {time}", DateTimeOffset.Now);
                     }
                     else

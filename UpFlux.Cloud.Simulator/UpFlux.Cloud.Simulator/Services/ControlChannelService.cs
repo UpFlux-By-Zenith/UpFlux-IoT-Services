@@ -323,7 +323,7 @@ namespace UpFlux.Cloud.Simulator
         /// <summary>
         /// Sends an update package to the gateway, which should forward/install it on the specified devices.
         /// </summary>
-        public async Task SendUpdatePackageAsync(string gatewayId, string fileName, byte[] packageData, string[] targetDevices)
+        public async Task SendUpdatePackageAsync(string gatewayId, string fileName, byte[] packageData, byte[] signatureData, string[] targetDevices)
         {
             if (!_connectedGateways.TryGetValue(gatewayId, out IServerStreamWriter<ControlMessage>? writer))
             {
@@ -334,7 +334,8 @@ namespace UpFlux.Cloud.Simulator
             UpdatePackage update = new UpdatePackage
             {
                 FileName = fileName,
-                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData)
+                PackageData = Google.Protobuf.ByteString.CopyFrom(packageData),
+                SignatureData = Google.Protobuf.ByteString.CopyFrom(signatureData)
             };
             update.TargetDevices.AddRange(targetDevices);
 
@@ -378,6 +379,7 @@ namespace UpFlux.Cloud.Simulator
         /// <param name="deviceUuids">The devices to target</param>
         /// <param name="fileName">The name of the update package</param>
         /// <param name="packageData">The binary data of the update package</param>
+        /// <param name="signatureData">The binary data of the package signature</param>
         /// <param name="startTimeUtc">The start time for the update</param>
         /// <returns>Returns the task for the async operation</returns>
         public async Task SendScheduledUpdateAsync(
@@ -386,6 +388,7 @@ namespace UpFlux.Cloud.Simulator
             string[] deviceUuids,
             string fileName,
             byte[] packageData,
+            byte[] signatureData,
             DateTime startTimeUtc
         )
         {
@@ -401,6 +404,7 @@ namespace UpFlux.Cloud.Simulator
                 ScheduleId = scheduleId,
                 FileName = fileName,
                 PackageData = Google.Protobuf.ByteString.CopyFrom(packageData),
+                SignatureData = Google.Protobuf.ByteString.CopyFrom(signatureData),
                 StartTime = Timestamp.FromDateTime(startTimeUtc.ToUniversalTime())
             };
             su.DeviceUuids.AddRange(deviceUuids);

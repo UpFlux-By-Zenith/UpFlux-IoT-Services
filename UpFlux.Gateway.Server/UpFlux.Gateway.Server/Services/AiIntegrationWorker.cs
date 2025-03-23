@@ -72,15 +72,8 @@ namespace UpFlux.Gateway.Server.Services
                             }
                         }
 
-                        // Merge with cluster data for scheduling
-                        var schedulingInput = new
-                        {
-                            clusters = clusters.Clusters,
-                            plotData = clusters.PlotData,
-                            aggregatorData = aggregatorDataList
-                        };
                         // Run scheduling
-                        AiSchedulingResult schedule = await _aiService.RunSchedulingAsync(clusters);
+                        AiSchedulingResult schedule = await _aiService.RunSchedulingAsync(clusters, aggregatorDataList);
 
                         if (schedule != null)
                         {

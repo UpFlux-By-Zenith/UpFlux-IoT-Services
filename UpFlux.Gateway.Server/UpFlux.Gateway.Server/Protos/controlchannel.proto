@@ -146,7 +146,8 @@ message SensorData {
 message UpdatePackage {
   string fileName = 1;           // .deb package name
   bytes packageData = 2;         // The raw .deb 
-  repeated string targetDevices = 3;
+  bytes signatureData = 3;       // The signature of the .deb
+  repeated string targetDevices = 4;
 }
 
 message UpdateAck {
@@ -216,8 +217,9 @@ message ScheduledUpdate {
   repeated string deviceUuids = 2;  
   string clusterId = 3;          
   string fileName = 4;           
-  bytes packageData = 5;        
-  google.protobuf.Timestamp startTime = 6; 
+  bytes packageData = 5;   
+  bytes signatureData = 6;
+  google.protobuf.Timestamp startTime = 7; 
 }
 
 // ====================== DEVICE STATUS =====================

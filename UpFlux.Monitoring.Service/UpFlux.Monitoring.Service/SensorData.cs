@@ -14,5 +14,6 @@ namespace UpFlux.Monitoring.Service
         public int red_value { get; set; }
         public int green_value { get; set; }
         public int blue_value { get; set; }
+        public string error { get; set; }
     }
 }
