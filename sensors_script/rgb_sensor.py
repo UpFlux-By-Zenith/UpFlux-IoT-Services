@@ -58,6 +58,7 @@ class ColorSensor:
     def warmup_sensor(self):
         """ Warm-up the sensor by waiting and discarding initial readings """
         GPIO.output(WARMUP_PIN, GPIO.HIGH)  # Signal Warmup
+        time.sleep(2)
 
         for _ in range(1):
             self.measure_color_frequency('red')
@@ -141,6 +142,7 @@ class ColorSensor:
                     error_msg = "Color out of threshold"
                 else:
                     logging.info("Valid color detected")
+                time.sleep(2)
                     
                 # Create a dictionary with the RGB values
                 sensor_data = {
@@ -155,8 +157,6 @@ class ColorSensor:
                 
                 # Log the sensor data if needed
                 logging.info(f"RGB Values -> R: {red_value}, G: {green_value}, B: {blue_value}")
-                
-                time.sleep(2)
 
             except Exception as e:
                 logging.error(f"error occurred: {e}", exc_info=True)
