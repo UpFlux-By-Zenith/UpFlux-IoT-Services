@@ -67,7 +67,7 @@ namespace UpFlux.Gateway.Server.Services
         /// <summary>
         /// Calls /ai/scheduling, providing cluster info, to get recommended update times.
         /// </summary>
-        public async Task<AiSchedulingResult> RunSchedulingAsync(AiClusteringResult clustering)
+        public async Task<AiSchedulingResult> RunSchedulingAsync(AiClusteringResult clustering, object aggregatorDataList)
         {
             if (clustering == null || clustering.Clusters == null || clustering.Clusters.Count == 0)
             {
@@ -75,11 +75,18 @@ namespace UpFlux.Gateway.Server.Services
                 return null;
             }
 
+            var payload = new
+            {
+                clusters = clustering.Clusters,
+                plotData = clustering.PlotData,
+                aggregatorData = aggregatorDataList
+            };
+
             string aiUrl = $"{_settings.AiServiceAddress}/ai/scheduling";
 
             try
             {
-                HttpResponseMessage resp = await _httpClient.PostAsJsonAsync(aiUrl, clustering);
+                HttpResponseMessage resp = await _httpClient.PostAsJsonAsync(aiUrl, payload);
                 resp.EnsureSuccessStatusCode();
 
                 AiSchedulingResult schedule = await resp.Content.ReadFromJsonAsync<AiSchedulingResult>();
