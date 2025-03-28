@@ -1,5 +1,5 @@
 """
-module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECTS WHITE
+module for reading color RGB values using TCS3200 Color Sensor and activating a buzzer based on specific RGB values. DETECTS RED
 """
 import RPi.GPIO as GPIO
 import time
@@ -69,10 +69,10 @@ class ColorSensor:
         
     def buzzer_condition(self, red_value, green_value, blue_value):
 
-    	if red_value > 200 and blue_value > 200 and green_value > 200:
+    	if red_value > 150 and red_value > (blue_value + 20) and red_value > (green_value + 20):
             return False
 
-    	return True
+    	return True  # Invalid color detected, activate buzzer
 
     def activate_buzzer(self):
         pwm.start(50)  
