@@ -122,6 +122,7 @@ namespace UpFlux.Gateway.Server.Services
         public double X { get; set; }  // coordinate for cluster graph for the Ui
         public double Y { get; set; }  // coordinate for cluster graph for the Ui
         public string ClusterId { get; set; }
+        public bool IsSynthetic { get; set; } = false; // true if this is a synthetic point
     }
 
     public class AiSchedulingResult
