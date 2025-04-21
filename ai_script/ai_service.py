@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Python microservice that:
-  1) /ai/clustering - performs DBSCAN on (BusyFraction, AvgCpu, AvgMem, AvgNet)
-      and returns clusters plus 2D coords for plotting
-  2) /ai/scheduling - given cluster assignments, does a scheduling approach
+Flask micro-service that exposes
+
+  • POST /ai/clustering   – DBSCAN → PCA(2D) + synthetic points for plotting
+  • POST /ai/scheduling   – window‑aware greedy scheduler
 """
 
 from flask import Flask, request, jsonify
@@ -13,181 +13,209 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import datetime
 import random
+import os
 
 app = Flask(__name__)
 
-EPS = 3.5
-MIN_SAMPLES = 2
+DBSCAN_EPS          = float(3.5)
+DBSCAN_MIN_SAMPLES  = int  (2)
 
+# total dots to render
+TARGET_TOTAL_POINTS = int  (100)
+
+# spread of fake dots
+SYNTHETIC_SIGMA     = float(0.12)
+
+# seconds the FW chunk takes
+UPDATE_PAYLOAD_SEC  = int  (25)
+CLUSTER_SETUP_SEC   = int  (5)
+MIN_CLUSTER_GAP_SEC = int  (30)
+
+
+# ---------------------------------------------------------------------------
+
+
+# ===========================================================================
+#  /ai/clustering
+# ===========================================================================
 @app.route("/ai/clustering", methods=["POST"])
 def clustering():
     """
-    Input: JSON array of { "deviceUuid": "...", "busyFraction": 0.7, "avgCpu": ..., "avgMem": ..., "avgNet": ... }
-    This will create a Nx4 matrix, run DBSCAN, do PCA(2D), 
-    return { "clusters": [ { "clusterId":"0", "deviceUuids":[] }, ...],
-             "plotData": [ { "deviceUuid":"...", "x":..., "y":..., "clusterId":"..." }, ... ] }
+    Expected body: list[{
+        "deviceUuid": "...",
+        "busyFraction": 0-1,
+        "avgCpu": float,
+        "avgMem": float,
+        "avgNet": float
+    }]
+
+    Returns
+    {
+      "clusters":  [ { "clusterId":"0", "deviceUuids":[...] }, ... ],
+      "plotData":  [ { "deviceUuid":"...", "x":.., "y":.., "clusterId":"0", "isSynthetic":false }, ... ]
+    }
     """
     data = request.get_json()
-    if not data or not isinstance(data, list):
-        return jsonify({"error":"Invalid input"}), 400
+    if not isinstance(data, list) or not data:
+        return jsonify({"error": "Input must be a non-empty array"}), 400
 
-    deviceUuids = []
-    vectors = []
-    for item in data:
-        deviceUuids.append(item["deviceUuid"])
-        vec = [
-            item["busyFraction"], 
-            item["avgCpu"], 
-            item["avgMem"], 
-            item["avgNet"]
-        ]
-        vectors.append(vec)
+    device_ids = [d["deviceUuid"] for d in data]
+    matrix = np.array([
+        [d["busyFraction"], d["avgCpu"], d["avgMem"], d["avgNet"]]
+        for d in data
+    ])
 
-    arr = np.array(vectors)
-    if arr.shape[0] < 2:
-        clusters_obj = [{"clusterId":"0", "deviceUuids":deviceUuids}]
-        return jsonify({
-            "clusters": clusters_obj,
-            "plotData": []
-        })
+    # ---- scaling → DBSCAN --------------------------------------------------
+    scaler     = StandardScaler()
+    X_scaled   = scaler.fit_transform(matrix)
+    db         = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES)
+    labels     = db.fit_predict(X_scaled)           # shape (N,)
 
-    # Normalize the data to have zero mean and unit variance - this will help position at the origin.
-    scaler = StandardScaler()
-    arr_normalized = scaler.fit_transform(arr)
-    
-    # Run DBSCAN clustering on normalized data.
-    db = DBSCAN(eps=EPS, min_samples=MIN_SAMPLES)
-    labels = db.fit_predict(arr_normalized)
+    # ---- PCA for 2-D plot --------------------------------------------------
+    pca        = PCA(n_components=2)
+    coords_2d  = pca.fit_transform(X_scaled)        # shape (N,2)
 
-    # Gather clusters
+    # ---- build real plot points + cluster list ----------------------------
+    plot_data  = []
     cluster_map = {}
-    for i, label in enumerate(labels):
-        lbl = str(label)
-        cluster_map.setdefault(lbl, []).append(deviceUuids[i])
-
-    # Perform PCA on normalized data for 2D plotting.
-    pca = PCA(n_components=2)
-    coords_2d = pca.fit_transform(arr_normalized)
-
-    plot_data = []
-    for i, label in enumerate(labels):
+    for idx, lbl in enumerate(labels):
+        lbl_str = str(lbl)
+        cluster_map.setdefault(lbl_str, []).append(device_ids[idx])
         plot_data.append({
-            "deviceUuid": deviceUuids[i],
-            "x": float(coords_2d[i,0]),
-            "y": float(coords_2d[i,1]),
-            "clusterId": str(label)
+            "deviceUuid" : device_ids[idx],
+            "x"          : float(coords_2d[idx, 0]),
+            "y"          : float(coords_2d[idx, 1]),
+            "clusterId"  : lbl_str,
+            "isSynthetic": False
         })
 
-    # build result
-    cluster_list = []
-    for label, devs in cluster_map.items():
-        cluster_list.append({
-            "clusterId": label,
-            "deviceUuids": devs
-        })
+    clusters = [
+        {"clusterId": cid, "deviceUuids": devs}
+        for cid, devs in cluster_map.items()
+    ]
 
-    return jsonify({
-        "clusters": cluster_list,
-        "plotData": plot_data
-    })
+    # -----------------------------------------------------------------------
+    #  add synthetic points purely for display -  these are for the fake devces (QCS)
+    # -----------------------------------------------------------------------
+    n_real   = len(plot_data)
+    n_fake   = max(0, TARGET_TOTAL_POINTS - n_real)
+    if n_fake:
+        # centroid per cluster in PCA space
+        centroids = {
+            lbl: coords_2d[labels == int(lbl)].mean(axis=0)
+            for lbl in cluster_map.keys()
+        }
+        # proportional allocation
+        tot_size = sum(len(v) for v in cluster_map.values())
+        fake_pts = []
+        counter  = 0
+        for lbl, size in cluster_map.items():
+            share = max(1, round(n_fake * len(size) / tot_size))
+            for _ in range(share):
+                mu = centroids[lbl]
+                sample = np.random.normal(loc=mu, scale=SYNTHETIC_SIGMA, size=2)
+                fake_pts.append({
+                    "deviceUuid": f"synthetic_{counter:04d}",
+                    "x"         : float(sample[0]),
+                    "y"         : float(sample[1]),
+                    "clusterId" : lbl,
+                    "isSynthetic": True
+                })
+                counter += 1
+                if counter >= n_fake:
+                    break
+            if counter >= n_fake:
+                break
+        plot_data.extend(fake_pts)
+
+    return jsonify({"clusters": clusters, "plotData": plot_data})
 
 
+# ===========================================================================
+#  /ai/scheduling
+# ===========================================================================
 @app.route("/ai/scheduling", methods=["POST"])
 def scheduling():
     """
-    Expects a JSON object that includes:
-      - clusters: List of clusters (each with "clusterId" and "deviceUuids")
-      - aggregatorData: (optional) List of objects representing predicted idle window for each device:
-            { "deviceUuid": "XYZ", "nextIdleTime": "2025-03-25T10:00:00Z", "idleDurationSecs": 45 }
-      
-    Returns a JSON object with:
-      - clusters: List of scheduled clusters with "clusterId", "deviceUuids", and "updateTimeUtc"
+    Input JSON:
+      {
+        "clusters":      [ { "clusterId":"0", "deviceUuids":[...] }, ... ],
+        "aggregatorData":[
+              { "deviceUuid":"...", "nextIdleTime":"2025-05-01T12:00:00Z", "idleDurationSecs": 60 },
+              ...
+        ]
+      }
+
+    Output:
+      { "clusters": [
+          { "clusterId":"0", "deviceUuids":[...], "updateTimeUtc":"2025-05-01T12:00:05Z" },
+          ...
+        ]}
     """
-    data = request.get_json()
-    if "clusters" not in data:
-        return jsonify({"error": "No clusters found"}), 400
+    req            = request.get_json(force=True)
+    clusters_input = req.get("clusters", [])
+    agg_list       = req.get("aggregatorData", [])
 
-    clusters = data["clusters"]
-    aggregatorData = data.get("aggregatorData", [])
-    idle_map = {}
-    for a in aggregatorData:
-        devUuid = a["deviceUuid"]
-        nxt = a["nextIdleTime"]
-        idSec = a["idleDurationSecs"]
-        idle_map[devUuid] = {"nextIdleTime": nxt, "idleDurationSecs": idSec}
+    idle_map = {a["deviceUuid"]: a for a in agg_list}
+    now       = datetime.datetime.now(datetime.timezone.utc)
 
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
-    scheduled = []
-
-    base_offset = 0
-    for c in clusters:
-        cId = c["clusterId"]
+    # ---- build feasible windows per cluster --------------------------------
+    jobs = []
+    for c in clusters_input:
         devs = c["deviceUuids"]
-
-        earliest_dt = None
-        minIdleSec = float('inf')
-        missing = False
-
+        windows = []
         for d in devs:
-            if d not in idle_map or idle_map[d]["nextIdleTime"] is None:
-                missing = True
+            info = idle_map.get(d)
+            # any missing then skip cluster
+            if not info or not info["nextIdleTime"]:
                 break
-            dt = datetime.datetime.fromisoformat(idle_map[d]["nextIdleTime"].replace("Z", "+00:00"))
-            idleSec = idle_map[d]["idleDurationSecs"]
-            if earliest_dt is None or dt < earliest_dt:
-                earliest_dt = dt
-            if idleSec < minIdleSec:
-                minIdleSec = idleSec
+            start = datetime.datetime.fromisoformat(
+                info["nextIdleTime"].replace("Z", "+00:00"))
+            dur   = info["idleDurationSecs"]
+            if dur < UPDATE_PAYLOAD_SEC + CLUSTER_SETUP_SEC:
+                break
+            windows.append((start, start + datetime.timedelta(seconds=dur)))
+        else:
+            # all devices had a window – intersect them
+            latest_start  = max(w[0] for w in windows)
+            earliest_end  = min(w[1] for w in windows)
+            if earliest_end >= latest_start + datetime.timedelta(seconds=UPDATE_PAYLOAD_SEC):
+                jobs.append({
+                    "clusterId"  : c["clusterId"],
+                    "deviceUuids": devs,
+                    "windowStart": latest_start,
+                    "windowEnd"  : earliest_end
+                })
 
-        if missing or minIdleSec < 20 or earliest_dt is None:
-            continue
+    # ---- schedule greedily then adjust -------------------------------------
+    jobs.sort(key=lambda j: j["windowStart"])
+    scheduled = []
+    current   = now
 
-        # Schedule the update at earliest idle time plus a base offset (naively)
-        scheduled_time = earliest_dt + datetime.timedelta(minutes=base_offset)
-        if scheduled_time < now_utc:
-            scheduled_time = now_utc + datetime.timedelta(seconds=10)
+    for j in jobs:
+        start = max(j["windowStart"], current)
+        if start + datetime.timedelta(seconds=UPDATE_PAYLOAD_SEC) <= j["windowEnd"]:
+            scheduled.append({
+                "clusterId"  : j["clusterId"],
+                "deviceUuids": j["deviceUuids"],
+                "updateTimeUtc": start.isoformat().replace("+00:00", "Z")
+            })
+            # next job cannot start before this ends + minimal gap
+            current = start + datetime.timedelta(
+                seconds=max(UPDATE_PAYLOAD_SEC, MIN_CLUSTER_GAP_SEC))
 
-        scheduled.append({
-            "clusterId": cId,
-            "deviceUuids": devs,
-            "updateTimeUtc": scheduled_time.isoformat().replace("+00:00", "Z")
-        })
-        base_offset += 2
+    # left-shift small gaps (simple repair)
+    for i in range(1, len(scheduled)):
+        prev_end = datetime.datetime.fromisoformat(
+            scheduled[i-1]["updateTimeUtc"].replace("Z", "+00:00")
+        ) + datetime.timedelta(seconds=UPDATE_PAYLOAD_SEC)
+        ideal = max(prev_end, jobs[i]["windowStart"])
+        if ideal + datetime.timedelta(seconds=UPDATE_PAYLOAD_SEC) <= jobs[i]["windowEnd"]:
+            scheduled[i]["updateTimeUtc"] = ideal.isoformat().replace("+00:00", "Z")
 
-    # Apply a simple LNS (destroy and repair) to minimize overlap.
-    def conflict_metric(sched):
-        times = [datetime.datetime.fromisoformat(sc["updateTimeUtc"].replace("Z", "+00:00")) for sc in sched]
-        times.sort()
-        total_conflict = 0
-        for i in range(len(times) - 1):
-            diff = (times[i+1] - times[i]).total_seconds()
-            if diff < 30:
-                total_conflict += (30 - diff)
-        return total_conflict
+    return jsonify({"clusters": scheduled})
 
-    best_sched = scheduled[:]
-    best_conflict = conflict_metric(best_sched)
 
-    for _ in range(10):
-        if len(best_sched) < 2:
-            break
-        indices = random.sample(range(len(best_sched)), len(best_sched)//2)
-        candidate = []
-        for i, sc in enumerate(best_sched):
-            if i not in indices:
-                candidate.append(sc)
-            else:
-                dt = datetime.datetime.fromisoformat(sc["updateTimeUtc"].replace("Z", "+00:00"))
-                shift = random.randint(-15, 15)
-                new_dt = dt + datetime.timedelta(seconds=shift * 10)
-                new_sc = dict(sc)
-                new_sc["updateTimeUtc"] = new_dt.isoformat().replace("+00:00", "Z")
-                candidate.append(new_sc)
-        if conflict_metric(candidate) < best_conflict:
-            best_conflict = conflict_metric(candidate)
-            best_sched = candidate
-
-    return jsonify({"clusters": best_sched})
-
+# ===========================================================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=82, debug=False)
