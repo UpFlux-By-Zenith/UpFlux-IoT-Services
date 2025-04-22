@@ -209,6 +209,7 @@ message AIPlotPoint {
   double x = 2;
   double y = 3;
   string clusterId = 4;
+  bool isSynthetic = 5;
 }
 
 // ===================== SCHEDULING UPDATES =====================

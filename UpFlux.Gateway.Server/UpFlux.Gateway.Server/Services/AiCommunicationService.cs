@@ -54,7 +54,10 @@ namespace UpFlux.Gateway.Server.Services
                 resp.EnsureSuccessStatusCode();
 
                 AiClusteringResult result = await resp.Content.ReadFromJsonAsync<AiClusteringResult>();
+                // log the full json file for debugging
+                string json = await resp.Content.ReadAsStringAsync();
                 _logger.LogInformation("AI clustering returned {0} clusters", result?.Clusters?.Count ?? 0);
+                _logger.LogInformation("AI clustering returned {0} plot points", result?.PlotData?.Count ?? 0);
                 return result;
             }
             catch (Exception ex)
@@ -122,6 +125,7 @@ namespace UpFlux.Gateway.Server.Services
         public double X { get; set; }  // coordinate for cluster graph for the Ui
         public double Y { get; set; }  // coordinate for cluster graph for the Ui
         public string ClusterId { get; set; }
+        public bool IsSynthetic { get; set; }
     }
 
     public class AiSchedulingResult

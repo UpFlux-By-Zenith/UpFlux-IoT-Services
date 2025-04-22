@@ -13,6 +13,8 @@ namespace UpFlux.Cloud.Simulator
         /// </summary>
         public int ListeningPort { get; set; } = 5002;
 
+        public int WebSocketPort { get; set; } = 5003;
+
         /// <summary>
         /// Passphrase to use for GPG encryption of the update package.
         /// </summary>
