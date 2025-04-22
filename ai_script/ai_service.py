@@ -23,7 +23,7 @@ DBSCAN_MIN_SAMPLES = int(2)
 TARGET_TOTAL_POINTS = int(100)
 
 # spread of fake dots
-SYNTHETIC_SIGMA = float(0.12)
+SYNTHETIC_SIGMA = float(0.3)
 
 # seconds the FW chunk takes
 UPDATE_PAYLOAD_SEC = int(25)
