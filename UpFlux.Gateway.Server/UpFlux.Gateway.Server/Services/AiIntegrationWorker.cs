@@ -42,6 +42,7 @@ namespace UpFlux.Gateway.Server.Services
                 {
                     // Run clustering
                     AiClusteringResult clusters = await _aiService.RunClusteringAsync();
+
                     if (clusters != null)
                     {
                         // Build aggregatorData from aggregator's predicted idle window

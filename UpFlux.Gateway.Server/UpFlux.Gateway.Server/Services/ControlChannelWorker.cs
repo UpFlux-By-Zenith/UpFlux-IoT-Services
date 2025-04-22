@@ -558,6 +558,13 @@ namespace UpFlux.Gateway.Server.Services
                 return;
             }
 
+            //log here all the plotdata points
+            foreach (AiPlotPoint p in clusters.PlotData)
+            {
+                _logger.LogInformation("PlotPoint: DeviceUuid={0}, X={1}, Y={2}, ClusterId={3}, IsSynthetic={4}",
+                    p.DeviceUuid, p.X, p.Y, p.ClusterId, p.IsSynthetic);
+            }
+
             AIRecommendations recs = new AIRecommendations();
 
             // fill scheduling clusters
@@ -585,7 +592,8 @@ namespace UpFlux.Gateway.Server.Services
                         DeviceUuid = p.DeviceUuid,
                         X = p.X,
                         Y = p.Y,
-                        ClusterId = p.ClusterId
+                        ClusterId = p.ClusterId,
+                        IsSynthetic = p.IsSynthetic
                     };
                     recs.PlotData.Add(pp);
                 }

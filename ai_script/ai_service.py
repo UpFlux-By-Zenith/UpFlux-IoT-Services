@@ -2,8 +2,8 @@
 """
 Flask micro-service that exposes
 
-  • POST /ai/clustering   – DBSCAN → PCA(2D) + synthetic points for plotting
-  • POST /ai/scheduling   – window‑aware greedy scheduler
+  • POST /ai/clustering   – DBSCAN -  PCA(2D) + synthetic points for plotting
+  • POST /ai/scheduling   – window aware greedy scheduler
 """
 
 from flask import Flask, request, jsonify
@@ -13,23 +13,22 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import datetime
 import random
-import os
 
 app = Flask(__name__)
 
-DBSCAN_EPS          = float(3.5)
-DBSCAN_MIN_SAMPLES  = int  (2)
+DBSCAN_EPS = float(3.5)
+DBSCAN_MIN_SAMPLES = int(2)
 
 # total dots to render
-TARGET_TOTAL_POINTS = int  (100)
+TARGET_TOTAL_POINTS = int(100)
 
 # spread of fake dots
-SYNTHETIC_SIGMA     = float(0.12)
+SYNTHETIC_SIGMA = float(0.12)
 
 # seconds the FW chunk takes
-UPDATE_PAYLOAD_SEC  = int  (25)
-CLUSTER_SETUP_SEC   = int  (5)
-MIN_CLUSTER_GAP_SEC = int  (30)
+UPDATE_PAYLOAD_SEC = int(25)
+CLUSTER_SETUP_SEC = int(5)
+MIN_CLUSTER_GAP_SEC = int(30)
 
 
 # ---------------------------------------------------------------------------
@@ -39,94 +38,114 @@ MIN_CLUSTER_GAP_SEC = int  (30)
 #  /ai/clustering
 # ===========================================================================
 @app.route("/ai/clustering", methods=["POST"])
-def clustering():
+def clustering() -> tuple:
     """
-    Expected body: list[{
-        "deviceUuid": "...",
-        "busyFraction": 0-1,
-        "avgCpu": float,
-        "avgMem": float,
-        "avgNet": float
-    }]
-
     Returns
-    {
-      "clusters":  [ { "clusterId":"0", "deviceUuids":[...] }, ... ],
-      "plotData":  [ { "deviceUuid":"...", "x":.., "y":.., "clusterId":"0", "isSynthetic":false }, ... ]
-    }
+      {
+        clusters : [ {clusterId:str, deviceUuids:list[str]} ... ]
+        plotData : [ {deviceUuid,x,y,clusterId,isSynthetic} ... ]
+      }
     """
-    data = request.get_json()
-    if not isinstance(data, list) or not data:
-        return jsonify({"error": "Input must be a non-empty array"}), 400
+    data: list[dict] = request.get_json(force=True)
+    if not data:
+        return jsonify({"error": "empty payload"}), 400
 
-    device_ids = [d["deviceUuid"] for d in data]
-    matrix = np.array([
-        [d["busyFraction"], d["avgCpu"], d["avgMem"], d["avgNet"]]
-        for d in data
-    ])
+    # real devices - QCS
+    real_ids   = [d["deviceUuid"] for d in data]
+    X_real     = np.asarray(
+        [[d["busyFraction"], d["avgCpu"], d["avgMem"], d["avgNet"]] for d in data],
+        dtype=float,
+    )
+    X_scaled   = StandardScaler().fit_transform(X_real)
 
-    # ---- scaling → DBSCAN --------------------------------------------------
-    scaler     = StandardScaler()
-    X_scaled   = scaler.fit_transform(matrix)
-    db         = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES)
-    labels     = db.fit_predict(X_scaled)           # shape (N,)
+    # A dynamic to set the episelum which chooses the number of clusters
+    TARGET_CLUSTERS = 6
+    EPS_RANGE       = np.arange(0.4, 2.05, 0.1)
 
-    # ---- PCA for 2-D plot --------------------------------------------------
-    pca        = PCA(n_components=2)
-    coords_2d  = pca.fit_transform(X_scaled)        # shape (N,2)
+    best_eps  = EPS_RANGE[0]
+    best_diff = 1e9
+    best_lbl  = None
 
-    # ---- build real plot points + cluster list ----------------------------
-    plot_data  = []
-    cluster_map = {}
-    for idx, lbl in enumerate(labels):
-        lbl_str = str(lbl)
-        cluster_map.setdefault(lbl_str, []).append(device_ids[idx])
-        plot_data.append({
-            "deviceUuid" : device_ids[idx],
-            "x"          : float(coords_2d[idx, 0]),
-            "y"          : float(coords_2d[idx, 1]),
-            "clusterId"  : lbl_str,
-            "isSynthetic": False
-        })
+    for eps in EPS_RANGE:
+        lbl = DBSCAN(eps=eps, min_samples=1).fit_predict(X_scaled)
+        n_clusters = len({l for l in lbl if l != -1})
+        diff = abs(n_clusters - TARGET_CLUSTERS)
+        if diff < best_diff:
+            best_eps, best_diff, best_lbl = eps, diff, lbl
+        if diff == 0:
+            break
 
-    clusters = [
-        {"clusterId": cid, "deviceUuids": devs}
-        for cid, devs in cluster_map.items()
-    ]
+    labels = best_lbl
 
-    # -----------------------------------------------------------------------
-    #  add synthetic points purely for display -  these are for the fake devces (QCS)
-    # -----------------------------------------------------------------------
-    n_real   = len(plot_data)
+    # PCA for plotting
+    coords_2d = PCA(n_components=2).fit_transform(X_scaled)
+
+    plot_data: list[dict] = []
+    real_cluster_map: dict[str, list[str]] = {}
+
+    for i, lbl in enumerate(labels):
+        cid = f"{lbl}"
+        real_cluster_map.setdefault(cid, []).append(real_ids[i])
+        plot_data.append(
+            dict(
+                deviceUuid=real_ids[i],
+                x=float(coords_2d[i, 0]),
+                y=float(coords_2d[i, 1]),
+                clusterId=cid,
+                isSynthetic=False,
+            )
+        )
+
+    # synthetic vectors in *4‑D* (The Fake QCS that we want to visualize on the plot)
+    n_real   = len(real_ids)
     n_fake   = max(0, TARGET_TOTAL_POINTS - n_real)
     if n_fake:
-        # centroid per cluster in PCA space
-        centroids = {
-            lbl: coords_2d[labels == int(lbl)].mean(axis=0)
-            for lbl in cluster_map.keys()
-        }
-        # proportional allocation
-        tot_size = sum(len(v) for v in cluster_map.values())
-        fake_pts = []
-        counter  = 0
-        for lbl, size in cluster_map.items():
-            share = max(1, round(n_fake * len(size) / tot_size))
-            for _ in range(share):
-                mu = centroids[lbl]
-                sample = np.random.normal(loc=mu, scale=SYNTHETIC_SIGMA, size=2)
-                fake_pts.append({
-                    "deviceUuid": f"synthetic_{counter:04d}",
-                    "x"         : float(sample[0]),
-                    "y"         : float(sample[1]),
-                    "clusterId" : lbl,
-                    "isSynthetic": True
-                })
-                counter += 1
-                if counter >= n_fake:
-                    break
-            if counter >= n_fake:
-                break
-        plot_data.extend(fake_pts)
+        rng = np.random.default_rng()
+        # 4‑D centroid of each *real* cluster (noise −1 is ignored)
+        real_centroids = {}
+        for cid, devs in real_cluster_map.items():
+            if cid == "-1":
+                continue
+            idx = [real_ids.index(d) for d in devs]
+            real_centroids[cid] = X_scaled[idx].mean(axis=0)
+
+        # helper to convert 4‑D vector into PCA 2‑D
+        pca_matrix = PCA(n_components=2).fit(X_scaled).components_.T
+
+        total_real = sum(len(v) for v in real_cluster_map.values() if v)
+        fake_id    = 0
+        syn_cluster_idx = 1
+
+        for cid, centre_4d in real_centroids.items():
+            share = round(n_fake * len(real_cluster_map[cid]) / total_real)
+            if share == 0:
+                continue
+            # generate share gaussian points in 4‑D, project to 2‑D
+            noise_4d = rng.normal(scale=SYNTHETIC_SIGMA, size=(share, 4))
+            pts_4d   = centre_4d + noise_4d
+            pts_2d   = pts_4d @ pca_matrix
+
+            for v4, (x2, y2) in zip(pts_4d, pts_2d):
+                plot_data.append(
+                    dict(
+                        deviceUuid=f"synthetic_{fake_id:04d}",
+                        x=float(x2),
+                        y=float(y2),
+                        clusterId=cid,
+                        isSynthetic=True,
+                    )
+                )
+                fake_id += 1
+            syn_cluster_idx += 1
+
+    # cluster list for the API
+    clusters = [
+        {"clusterId": cid, "deviceUuids": devs}
+        for cid, devs in real_cluster_map.items()
+    ] + [
+        {"clusterId": f"S{k}", "deviceUuids": []}      # synthetic clusters are empty here so they won't be scheudled
+        for k in range(1, syn_cluster_idx)
+    ]
 
     return jsonify({"clusters": clusters, "plotData": plot_data})
 
@@ -159,10 +178,12 @@ def scheduling():
     idle_map = {a["deviceUuid"]: a for a in agg_list}
     now       = datetime.datetime.now(datetime.timezone.utc)
 
-    # ---- build feasible windows per cluster --------------------------------
+    # ---- build feasible windows per cluster
     jobs = []
     for c in clusters_input:
         devs = c["deviceUuids"]
+        if not devs:
+            continue
         windows = []
         for d in devs:
             info = idle_map.get(d)
@@ -187,13 +208,13 @@ def scheduling():
                     "windowEnd"  : earliest_end
                 })
 
-    # ---- schedule greedily then adjust -------------------------------------
+    # ---- schedule greedily then adjust
     jobs.sort(key=lambda j: j["windowStart"])
     scheduled = []
     current   = now
 
     for j in jobs:
-        start = max(j["windowStart"], current)
+        start = max(j["windowStart"], current, now + datetime.timedelta(seconds=CLUSTER_SETUP_SEC))
         if start + datetime.timedelta(seconds=UPDATE_PAYLOAD_SEC) <= j["windowEnd"]:
             scheduled.append({
                 "clusterId"  : j["clusterId"],

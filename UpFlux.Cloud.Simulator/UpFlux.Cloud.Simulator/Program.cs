@@ -74,6 +74,11 @@ namespace UpFlux.Cloud.Simulator
                         {
                             listenOptions.Protocols = HttpProtocols.Http2;
                         });
+
+                        options.ListenAnyIP(cloudSettings.WebSocketPort, listenOptions =>
+                        {
+                            listenOptions.Protocols = HttpProtocols.Http1;
+                        });
                     });
                     webBuilder.UseStartup<Startup>();
                 });

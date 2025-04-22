@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Net.WebSockets;
+using System.Text.Json;
 using Google.Protobuf.WellKnownTypes;
 using UpFlux.Cloud.Simulator.Protos;
 
@@ -22,6 +24,9 @@ namespace UpFlux.Cloud.Simulator
         // A dictionary of "GatewayID" => the active IServerStreamWriter
         private readonly ConcurrentDictionary<string, IServerStreamWriter<ControlMessage>> _connectedGateways
             = new ConcurrentDictionary<string, IServerStreamWriter<ControlMessage>>();
+
+        // to add a web socket list
+        private readonly ConcurrentDictionary<Guid, WebSocket> _wsClients = new();
 
         public ControlChannelService(ILogger<ControlChannelService> logger)
         {
@@ -64,6 +69,24 @@ namespace UpFlux.Cloud.Simulator
             {
                 _connectedGateways.TryRemove(gatewayId, out _);
             }
+        }
+
+        /// <summary>
+        /// To register a WebSocket client for receiving AI recommendations.
+        /// </summary>
+        public void RegisterWebSocket(Guid id, WebSocket ws)
+        {
+            _wsClients.TryAdd(id, ws);
+            _logger.LogInformation("WebSocket [{0}] registered.", id);
+        }
+
+        /// <summary>
+        /// To unregister a WebSocket client.
+        /// </summary>
+        public void UnregisterWebSocket(Guid id)
+        {
+            _wsClients.TryRemove(id, out _);
+            _logger.LogInformation("WebSocket [{0}] unregistered.", id);
         }
 
         private async Task HandleIncomingMessage(string gatewayId, ControlMessage msg)
@@ -242,22 +265,42 @@ namespace UpFlux.Cloud.Simulator
             }
         }
 
+        /// <summary>
+        /// To broadcast AI recommendations to all connected WebSocket clients.
+        /// </summary>
+        private async Task BroadCastAsync(object payload, CancellationToken ct = default) {
+            if (_wsClients.IsEmpty) {
+                return;
+            }
+            byte[] json = JsonSerializer.SerializeToUtf8Bytes(payload);
+            foreach (var (_, sock) in _wsClients)
+            {
+                if (sock.State == WebSocketState.Open)
+                    await sock.SendAsync(json, WebSocketMessageType.Text, true, ct);
+            }
+        }
+
         // ---------- EXACT AI recommendations logic ----------
-        private void HandleAiRecommendations(string gatewayId, AIRecommendations aiRec)
+        private async void HandleAiRecommendations(string gatewayId, AIRecommendations aiRec)
         {
             _logger.LogInformation("AI Recommendations from [{0}]:", gatewayId);
 
             foreach (AIScheduledCluster? cluster in aiRec.Clusters)
             {
-                _logger.LogInformation(" Cluster={0}, updated={1}", cluster.ClusterId, cluster.UpdateTime.ToDateTime());
+                _logger.LogInformation(" Cluster={0}, updated={1}", cluster.ClusterId, cluster.UpdateTime.ToDateTime().ToLocalTime());
                 _logger.LogInformation("  Devices: {0}", string.Join(", ", cluster.DeviceUuids));
             }
 
             foreach (AIPlotPoint? plot in aiRec.PlotData)
             {
-                _logger.LogInformation(" Plot: dev={0}, x={1}, y={2}, cluster={3}",
-                    plot.DeviceUuid, plot.X, plot.Y, plot.ClusterId);
+                _logger.LogInformation(" Plot: dev={0}, x={1}, y={2}, cluster={3}, isSynthetic={4}",
+                    plot.DeviceUuid, plot.X, plot.Y, plot.ClusterId, plot.IsSynthetic ? "(synthetic)" : "(real)");
             }
+
+            await BroadCastAsync(new { 
+                clusters = aiRec.Clusters,
+                plotData = aiRec.PlotData
+            });
         }
 
         // ---------- PUBLIC METHODS to push messages from the console menu ----------
